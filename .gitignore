@@ -55,8 +55,8 @@ logs/
 # Reports
 reports/
 *.html
-*.json
-*.md
+reports/*.json
+reports/*.md
 
 # Temporary files
 *.tmp
