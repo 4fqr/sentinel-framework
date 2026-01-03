@@ -108,7 +108,7 @@ class SandboxEngine:
                 self.docker_client.ping()
                 logger.info("Docker backend initialized successfully")
             except Exception as e:
-                logger.warning(f"Docker daemon not available: {e}. Falling back to process isolation.")
+                logger.debug(f"Docker not available, using process isolation: {e}")
                 self.sandbox_type = SandboxType.PROCESS
         
         elif self.sandbox_type == SandboxType.PROCESS:

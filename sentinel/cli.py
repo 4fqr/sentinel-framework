@@ -479,45 +479,93 @@ def display_results(result):
     # Static Analysis Results
     if result.static_analysis:
         console.print(f"\n[bold cyan]🔍 Static Analysis:[/bold cyan]")
-        static_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
-        static_table.add_column("Property", style="cyan", width=20)
-        static_table.add_column("Value", style="white")
         
+        # PE Information
         if 'pe_info' in result.static_analysis:
             pe_info = result.static_analysis['pe_info']
+            pe_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+            pe_table.add_column("Property", style="cyan", width=22)
+            pe_table.add_column("Value", style="white")
+            
             if 'machine_type' in pe_info:
-                static_table.add_row("Machine Type", pe_info['machine_type'])
+                pe_table.add_row("Architecture", pe_info['machine_type'])
             if 'subsystem' in pe_info:
-                static_table.add_row("Subsystem", pe_info['subsystem'])
+                pe_table.add_row("Subsystem", pe_info['subsystem'])
             if 'compilation_timestamp' in pe_info:
-                static_table.add_row("Compiled", pe_info['compilation_timestamp'])
+                pe_table.add_row("Compilation Time", pe_info['compilation_timestamp'])
             if 'entry_point' in pe_info:
-                static_table.add_row("Entry Point", f"0x{pe_info['entry_point']:08X}")
+                pe_table.add_row("Entry Point", f"0x{pe_info['entry_point']:08X}")
+            if 'imphash' in pe_info:
+                pe_table.add_row("Import Hash", pe_info['imphash'])
+            if 'sections' in pe_info:
+                pe_table.add_row("PE Sections", str(pe_info['sections']))
+            
+            console.print(pe_table)
         
-        if 'imports' in result.static_analysis:
-            imports = result.static_analysis['imports']
-            static_table.add_row("Imported DLLs", str(len(imports)))
+        # Security Vulnerabilities
+        if 'vulnerabilities' in result.static_analysis and result.static_analysis['vulnerabilities']:
+            console.print(f"\n  [bold red]🛡️  Security Vulnerabilities ({len(result.static_analysis['vulnerabilities'])}):[/bold red]")
+            for vuln in result.static_analysis['vulnerabilities']:
+                severity_color = {'CRITICAL': 'bold red', 'HIGH': 'bold yellow', 'MEDIUM': 'yellow', 'LOW': 'cyan'}.get(vuln['severity'], 'white')
+                console.print(f"    [{severity_color}]■[/{severity_color}] [bold]{vuln['type']}[/bold] ([{severity_color}]{vuln['severity']}[/{severity_color}])")
+                console.print(f"      [dim]→[/dim] {vuln['description']}")
+                console.print(f"      [dim]⚠[/dim] Impact: [yellow]{vuln['impact']}[/yellow]")
+        
+        # Security Issues
+        if 'security_issues' in result.static_analysis and result.static_analysis['security_issues']:
+            console.print(f"\n  [bold yellow]⚠️  Security Issues ({len(result.static_analysis['security_issues'])}):[/bold yellow]")
+            for issue in result.static_analysis['security_issues']:
+                severity_color = {'CRITICAL': 'bold red', 'HIGH': 'bold yellow', 'MEDIUM': 'yellow', 'LOW': 'cyan'}.get(issue['severity'], 'white')
+                console.print(f"    [{severity_color}]■[/{severity_color}] [bold]{issue['type']}[/bold] ([{severity_color}]{issue['severity']}[/{severity_color}])")
+                console.print(f"      [dim]→[/dim] {issue['description']}")
+                console.print(f"      [dim]⚠[/dim] {issue['impact']}")
+        
+        # Dangerous API Imports
+        if 'dangerous_imports' in result.static_analysis and result.static_analysis['dangerous_imports']:
+            console.print(f"\n  [bold red]☠️  Dangerous API Calls ({len(result.static_analysis['dangerous_imports'])}):[/bold red]")
+            for api in result.static_analysis['dangerous_imports'][:15]:  # Show top 15
+                console.print(f"    [red]●[/red] [yellow]{api['dll']}[/yellow]![bold red]{api['function']}[/bold red]")
+                console.print(f"      [dim]→[/dim] {api['reason']}")
+            if len(result.static_analysis['dangerous_imports']) > 15:
+                console.print(f"    [dim]... and {len(result.static_analysis['dangerous_imports']) - 15} more dangerous APIs[/dim]")
+        
+        # Suspicious Indicators
+        if 'suspicious_indicators' in result.static_analysis and result.static_analysis['suspicious_indicators']:
+            console.print(f"\n  [bold yellow]🔎 Suspicious Indicators ({len(result.static_analysis['suspicious_indicators'])}):[/bold yellow]")
+            for indicator in result.static_analysis['suspicious_indicators']:
+                console.print(f"    [yellow]►[/yellow] [bold]{indicator['type']}:[/bold] {indicator['value']}")
+                console.print(f"      [dim]└─[/dim] {indicator['reason']}")
+        
+        # IOCs (Indicators of Compromise)
+        if 'strings' in result.static_analysis and 'iocs' in result.static_analysis['strings']:
+            iocs = result.static_analysis['strings']['iocs']
+            has_iocs = any(iocs.values())
             
-            # Show suspicious imports
-            suspicious_apis = ['VirtualAlloc', 'WriteProcessMemory', 'CreateRemoteThread', 'LoadLibrary', 
-                             'GetProcAddress', 'VirtualProtect', 'NtQuerySystemInformation']
-            found_suspicious = []
-            for dll, funcs in imports.items():
-                for func in funcs:
-                    if any(sus in func for sus in suspicious_apis):
-                        found_suspicious.append(f"{dll}!{func}")
-            
-            if found_suspicious:
-                console.print(static_table)
-                console.print(f"\n  [bold yellow]⚠ Suspicious API Imports:[/bold yellow]")
-                for api in found_suspicious[:10]:  # Show first 10
-                    console.print(f"    • [yellow]{api}[/yellow]")
-                if len(found_suspicious) > 10:
-                    console.print(f"    [dim]... and {len(found_suspicious) - 10} more[/dim]")
-            else:
-                console.print(static_table)
-        else:
-            console.print(static_table)
+            if has_iocs:
+                console.print(f"\n  [bold red]🚨 Indicators of Compromise:[/bold red]")
+                if iocs['urls']:
+                    console.print(f"    [bold cyan]URLs ({len(iocs['urls'])}):[/bold cyan]")
+                    for url in iocs['urls'][:5]:
+                        console.print(f"      • [blue]{url}[/blue]")
+                    if len(iocs['urls']) > 5:
+                        console.print(f"      [dim]... and {len(iocs['urls']) - 5} more URLs[/dim]")
+                
+                if iocs['ips']:
+                    console.print(f"    [bold cyan]IP Addresses ({len(iocs['ips'])}):[/bold cyan]")
+                    for ip in iocs['ips'][:5]:
+                        console.print(f"      • [magenta]{ip}[/magenta]")
+                
+                if iocs['registry_keys']:
+                    console.print(f"    [bold cyan]Registry Keys ({len(iocs['registry_keys'])}):[/bold cyan]")
+                    for key in iocs['registry_keys'][:3]:
+                        console.print(f"      • [yellow]{key}[/yellow]")
+                
+                if iocs['suspicious_strings']:
+                    console.print(f"    [bold cyan]Suspicious Strings:[/bold cyan]")
+                    for s in iocs['suspicious_strings'][:5]:
+                        console.print(f"      • [red]{s}[/red]")
+        
+        console.print()  # Spacing
     
     # Threat detections
     if result.threat_detections:

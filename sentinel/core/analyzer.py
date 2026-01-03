@@ -188,6 +188,312 @@ class MalwareAnalyzer:
         file_hashes: Dict[str, str]
     ) -> Dict[str, Any]:
         """
+        Perform comprehensive static analysis on sample
+        
+        Args:
+            sample_path: Path to sample
+            file_hashes: Pre-calculated file hashes
+        
+        Returns:
+            Dictionary with detailed static analysis results
+        """
+        static_info = {
+            'hashes': file_hashes,
+            'file_type': get_file_type(sample_path),
+            'file_size': format_bytes(Path(sample_path).stat().st_size),
+            'vulnerabilities': [],
+            'security_issues': [],
+            'suspicious_indicators': []
+        }
+        
+        # PE analysis for Windows executables
+        if sample_path.lower().endswith(('.exe', '.dll', '.sys')):
+            try:
+                import pefile
+                import math
+                pe = pefile.PE(sample_path)
+                
+                # Basic PE info
+                pe_info = {
+                    'imphash': pe.get_imphash(),
+                    'compilation_timestamp': self._format_timestamp(pe.FILE_HEADER.TimeDateStamp),
+                    'machine_type': self._get_machine_type(pe.FILE_HEADER.Machine),
+                    'subsystem': self._get_subsystem(pe.OPTIONAL_HEADER.Subsystem),
+                    'entry_point': pe.OPTIONAL_HEADER.AddressOfEntryPoint,
+                    'image_base': pe.OPTIONAL_HEADER.ImageBase,
+                    'sections': len(pe.sections),
+                    'characteristics': []
+                }
+                
+                # Check PE characteristics for security issues
+                if pe.FILE_HEADER.Characteristics & 0x0001:  # IMAGE_FILE_RELOCS_STRIPPED
+                    static_info['security_issues'].append({
+                        'type': 'No ASLR Support',
+                        'severity': 'HIGH',
+                        'description': 'Binary compiled without relocation info, ASLR cannot be applied',
+                        'impact': 'Makes exploitation easier - fixed memory addresses'
+                    })
+                
+                if not (pe.OPTIONAL_HEADER.DllCharacteristics & 0x0040):  # IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
+                    static_info['security_issues'].append({
+                        'type': 'ASLR Disabled',
+                        'severity': 'HIGH',
+                        'description': 'Address Space Layout Randomization is disabled',
+                        'impact': 'Predictable memory layout makes exploitation easier'
+                    })
+                
+                if not (pe.OPTIONAL_HEADER.DllCharacteristics & 0x0100):  # IMAGE_DLLCHARACTERISTICS_NX_COMPAT
+                    static_info['security_issues'].append({
+                        'type': 'DEP/NX Disabled',
+                        'severity': 'CRITICAL',
+                        'description': 'Data Execution Prevention is not enabled',
+                        'impact': 'Stack/heap can be executed, enabling buffer overflow attacks'
+                    })
+                
+                if not (pe.OPTIONAL_HEADER.DllCharacteristics & 0x0400):  # IMAGE_DLLCHARACTERISTICS_NO_SEH
+                    static_info['vulnerabilities'].append({
+                        'type': 'SEH Exploitable',
+                        'severity': 'MEDIUM',
+                        'description': 'Structured Exception Handler exploitation possible',
+                        'impact': 'Exception handler chain can be hijacked'
+                    })
+                
+                # Section analysis - detect packing/suspicious sections
+                suspicious_sections = []
+                for section in pe.sections:
+                    section_name = section.Name.decode().rstrip('\x00')
+                    entropy = self._calculate_entropy(section.get_data())
+                    
+                    section_info = {
+                        'name': section_name,
+                        'virtual_size': section.Misc_VirtualSize,
+                        'raw_size': section.SizeOfRawData,
+                        'entropy': f'{entropy:.2f}',
+                        'characteristics': []
+                    }
+                    
+                    # High entropy suggests encryption/packing
+                    if entropy > 7.2:
+                        suspicious_sections.append(section_name)
+                        static_info['suspicious_indicators'].append({
+                            'type': 'High Entropy Section',
+                            'value': f'{section_name} (entropy: {entropy:.2f})',
+                            'reason': 'Possible packed/encrypted code - common in malware'
+                        })
+                    
+                    # Writable and executable = CODE INJECTION RISK
+                    if (section.Characteristics & 0x80000000) and (section.Characteristics & 0x20000000):
+                        static_info['vulnerabilities'].append({
+                            'type': 'RWX Section',
+                            'severity': 'CRITICAL',
+                            'description': f'Section {section_name} is writable AND executable',
+                            'impact': 'Perfect target for code injection attacks'
+                        })
+                
+                if suspicious_sections:
+                    static_info['suspicious_indicators'].append({
+                        'type': 'Packing Detected',
+                        'value': f'{len(suspicious_sections)} sections with high entropy',
+                        'reason': 'Binary may be packed/obfuscated to hide malicious code'
+                    })
+                
+                static_info['pe_info'] = pe_info
+                
+                # Import analysis - DEEP SCAN
+                imports = {}
+                dangerous_apis = {
+                    'VirtualAlloc': 'Memory allocation - used in code injection',
+                    'VirtualProtect': 'Changes memory permissions - enables code execution',
+                    'WriteProcessMemory': 'Writes to other process memory - code injection',
+                    'CreateRemoteThread': 'Creates thread in another process - DLL injection',
+                    'LoadLibrary': 'Loads DLL at runtime - suspicious if combined with GetProcAddress',
+                    'GetProcAddress': 'Gets function address - used to call APIs dynamically',
+                    'WinExec': 'Executes commands - potential backdoor',
+                    'ShellExecute': 'Launches programs - dropper behavior',
+                    'URLDownloadToFile': 'Downloads files from internet - downloader malware',
+                    'InternetOpen': 'Internet connection - C2 communication',
+                    'HttpSendRequest': 'Sends HTTP requests - data exfiltration',
+                    'RegSetValue': 'Modifies registry - persistence mechanism',
+                    'CreateProcess': 'Spawns new process - lateral movement',
+                    'CryptEncrypt': 'Encrypts data - ransomware indicator',
+                    'CryptDecrypt': 'Decrypts data - possibly decrypting payload',
+                    'AdjustTokenPrivileges': 'Elevates privileges - privilege escalation',
+                    'CreateService': 'Installs service - persistence as service',
+                    'OpenProcess': 'Opens handle to process - process manipulation',
+                    'ReadProcessMemory': 'Reads process memory - credential stealing',
+                    'VirtualAllocEx': 'Allocates memory in remote process - injection',
+                    'NtQuerySystemInformation': 'Low-level system info - anti-analysis',
+                    'IsDebuggerPresent': 'Debugger detection - anti-analysis',
+                    'CheckRemoteDebuggerPresent': 'Remote debugger check - anti-analysis',
+                    'GetTickCount': 'Timing check - sandbox evasion',
+                    'Sleep': 'Delays execution - sandbox evasion'
+                }
+                
+                dangerous_found = []
+                if hasattr(pe, 'DIRECTORY_ENTRY_IMPORT'):
+                    for entry in pe.DIRECTORY_ENTRY_IMPORT:
+                        dll_name = entry.dll.decode() if isinstance(entry.dll, bytes) else entry.dll
+                        imports[dll_name] = []
+                        
+                        for imp in entry.imports:
+                            if imp.name:
+                                func_name = imp.name.decode() if isinstance(imp.name, bytes) else imp.name
+                                imports[dll_name].append(func_name)
+                                
+                                # Check if dangerous
+                                if func_name in dangerous_apis:
+                                    dangerous_found.append({
+                                        'dll': dll_name,
+                                        'function': func_name,
+                                        'reason': dangerous_apis[func_name]
+                                    })
+                
+                static_info['imports'] = imports
+                static_info['dangerous_imports'] = dangerous_found
+                
+                if dangerous_found:
+                    static_info['suspicious_indicators'].append({
+                        'type': 'Dangerous API Imports',
+                        'value': f'{len(dangerous_found)} high-risk functions imported',
+                        'reason': 'APIs commonly used in malware for injection, persistence, evasion'
+                    })
+                
+                # Check for no imports = PACKED
+                if not hasattr(pe, 'DIRECTORY_ENTRY_IMPORT') or len(imports) < 5:
+                    static_info['suspicious_indicators'].append({
+                        'type': 'Minimal Imports',
+                        'value': f'{len(imports)} DLLs imported',
+                        'reason': 'Very few imports suggests packing or runtime loading'
+                    })
+                
+            except Exception as e:
+                logger.error(f"PE analysis failed: {e}")
+                static_info['pe_error'] = str(e)
+        
+        # String extraction and analysis
+        try:
+            with open(sample_path, 'rb') as f:
+                data = f.read()
+                
+                # Extract strings
+                strings = self._extract_strings(data)
+                
+                # Look for IOCs (Indicators of Compromise)
+                iocs = {
+                    'urls': [],
+                    'ips': [],
+                    'emails': [],
+                    'file_paths': [],
+                    'registry_keys': [],
+                    'suspicious_strings': []
+                }
+                
+                import re
+                for s in strings:
+                    # URLs
+                    if re.match(r'https?://', s):
+                        iocs['urls'].append(s)
+                    # IP addresses
+                    if re.match(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', s):
+                        iocs['ips'].append(s)
+                    # Emails
+                    if re.match(r'[\w\.-]+@[\w\.-]+', s):
+                        iocs['emails'].append(s)
+                    # Registry keys
+                    if 'HKEY_' in s or 'Software\\' in s:
+                        iocs['registry_keys'].append(s)
+                    # Ransomware keywords
+                    if any(keyword in s.lower() for keyword in ['decrypt', 'ransom', 'bitcoin', 'payment', 'encrypted']):
+                        iocs['suspicious_strings'].append(s)
+                
+                static_info['strings'] = {
+                    'total': len(strings),
+                    'iocs': iocs
+                }
+                
+                if iocs['urls']:
+                    static_info['suspicious_indicators'].append({
+                        'type': 'Embedded URLs',
+                        'value': f'{len(iocs["urls"])} URLs found',
+                        'reason': 'May contact remote servers for C2 or downloading payloads'
+                    })
+                
+        except Exception as e:
+            logger.error(f"String extraction failed: {e}")
+        
+        return static_info
+    
+    def _calculate_entropy(self, data: bytes) -> float:
+        """Calculate Shannon entropy of data"""
+        if not data:
+            return 0.0
+        
+        import math
+        entropy = 0
+        for x in range(256):
+            p_x = float(data.count(bytes([x]))) / len(data)
+            if p_x > 0:
+                entropy += - p_x * math.log2(p_x)
+        return entropy
+    
+    def _extract_strings(self, data: bytes, min_len: int = 5) -> list:
+        """Extract printable strings from binary data"""
+        import string
+        result = []
+        current = []
+        
+        for byte in data:
+            if chr(byte) in string.printable:
+                current.append(chr(byte))
+            else:
+                if len(current) >= min_len:
+                    result.append(''.join(current))
+                current = []
+        
+        if len(current) >= min_len:
+            result.append(''.join(current))
+        
+        return result[:500]  # Limit to 500 strings
+    
+    def _format_timestamp(self, timestamp: int) -> str:
+        """Format PE timestamp"""
+        from datetime import datetime
+        try:
+            return datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            return 'Invalid timestamp'
+    
+    def _get_machine_type(self, machine: int) -> str:
+        """Get human-readable machine type"""
+        types = {
+            0x014c: 'i386 (32-bit)',
+            0x8664: 'x86-64 (64-bit)',
+            0x0200: 'IA64',
+            0x01c0: 'ARM',
+            0xaa64: 'ARM64'
+        }
+        return types.get(machine, f'Unknown (0x{machine:04x})')
+    
+    def _get_subsystem(self, subsystem: int) -> str:
+        """Get human-readable subsystem"""
+        systems = {
+            1: 'Native',
+            2: 'Windows GUI',
+            3: 'Windows CUI (Console)',
+            5: 'OS/2 CUI',
+            7: 'POSIX CUI',
+            9: 'Windows CE GUI',
+            10: 'EFI Application',
+            16: 'Windows Boot Application'
+        }
+        return systems.get(subsystem, f'Unknown ({subsystem})')
+    
+    def _perform_static_analysis_OLD(
+        self,
+        sample_path: str,
+        file_hashes: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """
         Perform static analysis on sample
         
         Args:
