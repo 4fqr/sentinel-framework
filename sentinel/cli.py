@@ -307,34 +307,55 @@ def cli():
 
 @cli.command()
 @click.argument('sample', type=click.Path(exists=True))
-@click.option('--timeout', '-t', default=None, type=int, help='Analysis timeout in seconds')
-@click.option('--no-static', is_flag=True, help='Disable static analysis')
-@click.option('--no-dynamic', is_flag=True, help='Disable dynamic analysis')
-@click.option('--format', '-f', type=click.Choice(['html', 'json', 'markdown']), help='Report format')
-@click.option('--output', '-o', type=click.Path(), help='Output directory path')
-@click.option('--live', is_flag=True, help='Show live analysis telemetry')
+@click.option('--timeout', '-t', default=None, type=int, help='Analysis timeout in seconds (default: 300)')
+@click.option('--no-static', is_flag=True, help='Disable static analysis (PE parsing, hash calculation)')
+@click.option('--no-dynamic', is_flag=True, help='Disable dynamic analysis (sandbox execution)')
+@click.option('--format', '-f', type=click.Choice(['html', 'json', 'markdown']), help='Report format (default: html)')
+@click.option('--output', '-o', type=click.Path(), help='Output directory or file path (supports absolute paths)')
+@click.option('--live', is_flag=True, help='Show real-time analysis dashboard with live telemetry')
 @click.option('--recursive', '-r', is_flag=True, help='Recursively analyze all files in directory')
-@click.option('--parallel', '-p', type=int, default=1, help='Number of parallel analysis workers (default: 1)')
+@click.option('--parallel', '-p', type=int, default=1, help='Number of parallel workers for batch analysis (1-16)')
 @click.option('--extensions', '-e', multiple=True, help='File extensions to analyze (e.g., .exe .dll .pdf)')
 def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recursive, parallel, extensions):
     """
-    Analyze a malware sample or entire directory
+    Analyze a malware sample or entire directory of samples
     
-    SAMPLE: Path to the sample file or directory to analyze
-    
-    Examples:
     \b
-      # Analyze single file
-      sentinel analyze malware.exe --live
-      
-      # Analyze entire directory
-      sentinel analyze /samples --recursive
-      
-      # Analyze with specific extensions
-      sentinel analyze /samples -r -e .exe -e .dll -e .pdf
-      
-      # Parallel analysis with 4 workers
-      sentinel analyze /samples -r --parallel 4
+    SAMPLE: Path to the file or directory to analyze
+            Supports both relative and absolute paths
+            Works across all drives (C:/, D:/, etc.)
+    
+    \b
+    SINGLE FILE EXAMPLES:
+        python -m sentinel analyze "C:/Samples/malware.exe" --live
+        python -m sentinel analyze "D:/suspicious/file.pdf" --format json
+        python -m sentinel analyze "C:/Downloads/sample.exe" --timeout 600
+    
+    \b
+    DIRECTORY EXAMPLES:
+        python -m sentinel analyze "C:/MalwareSamples" --recursive
+        python -m sentinel analyze "D:/Samples" -r --parallel 4
+        python -m sentinel analyze "C:/Mixed" -r -e .exe -e .dll
+    
+    \b
+    ADVANCED EXAMPLES:
+        # Parallel analysis with custom output
+        python -m sentinel analyze "D:/Malware" -r -p 8 -o "C:/Reports"
+        
+        # JSON output for automation
+        python -m sentinel analyze "C:/sample.exe" -f json -o "C:/report.json"
+        
+        # Extended timeout with live monitoring
+        python -m sentinel analyze "D:/threat.exe" -t 1800 --live
+    
+    \b
+    FEATURES:
+        ✓ Static Analysis: PE parsing, hash calculation, metadata extraction
+        ✓ Dynamic Analysis: Sandboxed execution with behavioral monitoring  
+        ✓ Batch Processing: Analyze entire directories in parallel
+        ✓ Real-time Dashboard: Live event monitoring with --live flag
+        ✓ Multiple Formats: HTML, JSON, or Markdown reports
+        ✓ Cross-drive Support: Works on C:/, D:/, or any mounted drive
     """
     print_banner()
     
@@ -471,7 +492,26 @@ def display_results(result):
 @cli.command()
 @click.argument('report_file', type=click.Path(exists=True))
 def view(report_file):
-    """View an existing analysis report"""
+    """
+    View an existing analysis report in terminal or browser
+    
+    \b
+    REPORT_FILE: Path to the report file (HTML, JSON, or Markdown)
+                 Supports absolute paths across all drives
+    
+    \b
+    EXAMPLES:
+        python -m sentinel view "C:/Reports/analysis_20240103.json"
+        python -m sentinel view "D:/Analysis/malware_report.html"
+        python -m sentinel view "C:/Reports/batch_analysis.md"
+    
+    \b
+    FEATURES:
+        ✓ Auto-opens HTML reports in default browser
+        ✓ Pretty-prints JSON reports in terminal
+        ✓ Displays Markdown reports with formatting
+        ✓ Cross-drive path support
+    """
     print_banner()
     
     report_path = Path(report_file)
@@ -489,7 +529,22 @@ def view(report_file):
 
 @cli.command()
 def info():
-    """Display Sentinel Framework information"""
+    """
+    Display Sentinel Framework system information and configuration
+    
+    \b
+    Shows:
+        • Framework version
+        • Sandbox configuration (Docker/Process isolation)
+        • Default analysis timeout
+        • Report format settings
+        • Enabled behavioral monitors
+        • Output directory location
+    
+    \b
+    EXAMPLE:
+        python -m sentinel info
+    """
     print_banner()
     
     info_table = Table(show_header=False, box=box.SIMPLE)
@@ -520,10 +575,25 @@ def info():
 
 
 @cli.command(name="list-reports")
-@click.option('--format', '-f', type=click.Choice(['html', 'json', 'markdown', 'all']), default='all', help='Filter by report format')
-@click.option('--limit', '-l', type=int, default=20, help='Maximum number of reports to show')
+@click.option('--format', '-f', type=click.Choice(['html', 'json', 'markdown', 'all']), default='all', help='Filter reports by format')
+@click.option('--limit', '-l', type=int, default=20, help='Maximum number of reports to display (default: 20)')
 def list_reports(format, limit):
-    """List all generated analysis reports"""
+    """
+    List all generated analysis reports with details
+    
+    \b
+    FEATURES:
+        • Shows report name, type, size, and modification date
+        • Filters by format (HTML, JSON, Markdown, or all)
+        • Sorts by newest first
+        • Customizable result limit
+    
+    \b
+    EXAMPLES:
+        python -m sentinel list-reports
+        python -m sentinel list-reports --format html --limit 50
+        python -m sentinel list-reports -f json -l 10
+    """
     reports_dir = Path(config.get('reporting.output_dir', 'reports'))
     
     if not reports_dir.exists():
@@ -587,10 +657,31 @@ def list_reports(format, limit):
 
 @cli.command(name="clean-reports")
 @click.option('--older-than', '-o', type=int, help='Delete reports older than N days')
-@click.option('--all', '-a', is_flag=True, help='Delete all reports')
+@click.option('--all', '-a', is_flag=True, help='Delete all reports (use with caution!)')
 @click.confirmation_option(prompt='Are you sure you want to delete reports?')
 def clean_reports(older_than, all):
-    """Clean up old analysis reports"""
+    """
+    Clean up old analysis reports to free disk space
+    
+    \b
+    WARNING: This action cannot be undone!
+             Confirmation prompt will appear before deletion
+    
+    \b
+    EXAMPLES:
+        # Delete reports older than 30 days
+        python -m sentinel clean-reports --older-than 30
+        
+        # Delete all reports (asks for confirmation)
+        python -m sentinel clean-reports --all
+    
+    \b
+    FEATURES:
+        • Shows number of deleted reports
+        • Displays freed disk space
+        • Requires confirmation before deletion
+        • Safe cleanup of reports directory
+    """
     reports_dir = Path(config.get('reporting.output_dir', 'reports'))
     
     if not reports_dir.exists():

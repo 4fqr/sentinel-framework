@@ -167,17 +167,17 @@ sentinel info
 ### 🎯 First Analysis in 30 Seconds
 
 ```bash
-# Basic analysis
-sentinel analyze suspicious_file.exe
+# Basic analysis with absolute path
+python -m sentinel analyze "C:/Samples/suspicious_file.exe"
 
 # With live real-time monitoring (RECOMMENDED)
-sentinel analyze suspicious_file.exe --live
+python -m sentinel analyze "C:/Samples/suspicious_file.exe" --live
 
 # Generate JSON report for automation
-sentinel analyze suspicious_file.exe --format json --output report.json
+python -m sentinel analyze "C:/Samples/suspicious_file.exe" --format json --output "C:/Reports/report.json"
 
-# Extended analysis with custom timeout
-sentinel analyze suspicious_file.exe --timeout 600 --live
+# Extended analysis with custom timeout (10 minutes)
+python -m sentinel analyze "D:/Samples/suspicious_file.exe" --timeout 600 --live
 ```
 
 ### 📸 What You'll See
@@ -203,22 +203,20 @@ When running with `--live` mode, you get a beautiful real-time dashboard:
 
 ### Command Line Interface
 
-Sentinel provides a comprehensive CLI for all your malware analysis needs. After installation, you can use either:
-- `sentinel <command>` - Direct command (after restarting terminal)
-- `python -m sentinel <command>` - Python module syntax (works immediately)
+Sentinel provides a comprehensive CLI for all your malware analysis needs. **Always use the `python -m sentinel` syntax** for reliable cross-platform execution:
 
 #### 📋 **All Available Commands**
 
 ```bash
 # Get help
-sentinel --help              # Show all commands
-sentinel analyze --help      # Get help for specific command
+python -m sentinel --help              # Show all commands
+python -m sentinel analyze --help      # Get help for specific command
 
 # View version
-sentinel --version           # Display Sentinel version
+python -m sentinel --version           # Display Sentinel version
 
 # System information
-sentinel info                # Show configuration and enabled features
+python -m sentinel info                # Show configuration and enabled features
 ```
 
 ---
@@ -229,45 +227,51 @@ sentinel info                # Show configuration and enabled features
 
 ```bash
 # Basic analysis
-sentinel analyze malware.exe
+python -m sentinel analyze "C:/Samples/malware.exe"
 
 # With real-time monitoring dashboard (RECOMMENDED)
-sentinel analyze malware.exe --live
+python -m sentinel analyze "C:/Samples/malware.exe" --live
+
+# Analyze file on different drive
+python -m sentinel analyze "D:/suspicious/sample.exe" --live
 
 # Custom timeout (in seconds)
-sentinel analyze malware.exe --timeout 600
+python -m sentinel analyze "C:/Samples/malware.exe" --timeout 600
 
 # Disable specific analysis types
-sentinel analyze malware.exe --no-static    # Skip static analysis
-sentinel analyze malware.exe --no-dynamic   # Skip dynamic execution
+python -m sentinel analyze "C:/Samples/malware.exe" --no-static    # Skip static analysis
+python -m sentinel analyze "C:/Samples/malware.exe" --no-dynamic   # Skip dynamic execution
 
 # Specify report format
-sentinel analyze malware.exe --format html       # HTML report (default)
-sentinel analyze malware.exe --format json       # JSON for automation
-sentinel analyze malware.exe --format markdown   # Markdown documentation
+python -m sentinel analyze "C:/Samples/malware.exe" --format html       # HTML report (default)
+python -m sentinel analyze "C:/Samples/malware.exe" --format json       # JSON for automation
+python -m sentinel analyze "C:/Samples/malware.exe" --format markdown   # Markdown documentation
 
-# Custom output location
-sentinel analyze malware.exe --output ./reports/analysis.html
+# Custom output location with absolute path
+python -m sentinel analyze "C:/Samples/malware.exe" --output "D:/Reports/analysis.html"
 ```
 
 #### 📂 **Directory Batch Analysis** - NEW!
 
 ```bash
-# Analyze all files in a directory
-sentinel analyze ./samples --recursive
+# Analyze all files in a directory (current drive)
+python -m sentinel analyze "C:/Samples" --recursive
+
+# Analyze directory on different drive
+python -m sentinel analyze "D:/MalwareCollection" --recursive
 
 # Analyze with specific file extensions
-sentinel analyze ./samples --recursive --extensions .exe --extensions .dll
+python -m sentinel analyze "C:/Samples" --recursive --extensions .exe --extensions .dll
 
-# Parallel analysis with multiple workers
-sentinel analyze ./samples --recursive --parallel 4
+# Parallel analysis with multiple workers (faster!)
+python -m sentinel analyze "C:/Samples" --recursive --parallel 4
 
 # Complete example: recursive analysis with 8 workers, JSON output
-sentinel analyze ./malware_collection --recursive \
+python -m sentinel analyze "D:/MalwareCollection" --recursive \
     --parallel 8 \
     --extensions .exe --extensions .dll --extensions .pdf \
     --format json \
-    --output ./batch_reports
+    --output "D:/AnalysisReports"
 
 # Supported extensions (auto-detected):
 # Executables: .exe, .dll, .sys
@@ -294,15 +298,15 @@ sentinel analyze ./malware_collection --recursive \
 
 ```bash
 # List all reports
-sentinel list-reports
+python -m sentinel list-reports
 
 # Filter by format
-sentinel list-reports --format html
-sentinel list-reports --format json
-sentinel list-reports --format markdown
+python -m sentinel list-reports --format html
+python -m sentinel list-reports --format json
+python -m sentinel list-reports --format markdown
 
 # Limit results
-sentinel list-reports --limit 50
+python -m sentinel list-reports --limit 50
 
 # Example output:
 # ╔══════════════════════════════════════════════════╗
@@ -318,21 +322,24 @@ sentinel list-reports --limit 50
 #### View Reports
 
 ```bash
-# View a specific report
-sentinel view reports/analysis_20240103_120000.json
+# View a specific report with absolute path
+python -m sentinel view "C:/Reports/analysis_20240103_120000.json"
 
 # Opens HTML reports in browser automatically
-sentinel view reports/malware_analysis.html
+python -m sentinel view "C:/Reports/malware_analysis.html"
+
+# View report on different drive
+python -m sentinel view "D:/AnalysisReports/report.json"
 ```
 
 #### Clean Reports
 
 ```bash
 # Delete old reports (with confirmation prompt)
-sentinel clean-reports --older-than 30    # Delete reports older than 30 days
+python -m sentinel clean-reports --older-than 30    # Delete reports older than 30 days
 
 # Delete all reports (WARNING: asks for confirmation)
-sentinel clean-reports --all
+python -m sentinel clean-reports --all
 ```
 
 ---
@@ -358,23 +365,23 @@ sentinel clean-reports --all
 #### Example 1: Quick Single File Analysis
 ```bash
 # Analyze with live monitoring
-sentinel analyze suspicious.exe --live
+python -m sentinel analyze "C:/Downloads/suspicious.exe" --live
 ```
 
 #### Example 2: Batch Analysis of Malware Collection
 ```bash
 # Analyze 100+ samples with 4 parallel workers
-sentinel analyze ./malware_samples \
+python -m sentinel analyze "D:/MalwareSamples" \
     --recursive \
     --parallel 4 \
     --format json \
-    --output ./analysis_reports
+    --output "D:/AnalysisReports"
 ```
 
 #### Example 3: Targeted Extension Analysis
 ```bash
-# Only analyze executables and DLLs
-sentinel analyze ./mixed_files \
+# Only analyze executables and DLLs from mixed directory
+python -m sentinel analyze "C:/MixedFiles" \
     --recursive \
     --extensions .exe \
     --extensions .dll \
@@ -383,20 +390,20 @@ sentinel analyze ./mixed_files \
 
 #### Example 4: Long-Running Deep Analysis
 ```bash
-# Extended timeout for complex malware
-sentinel analyze advanced_threat.exe \
+# Extended timeout for complex malware (30 minutes)
+python -m sentinel analyze "D:/Threats/advanced_threat.exe" \
     --timeout 1800 \
     --live \
     --format html \
-    --output detailed_report.html
+    --output "C:/Reports/detailed_report.html"
 ```
 
 #### Example 5: Automation-Friendly JSON Output
 ```bash
 # Generate machine-readable report for SIEM integration
-sentinel analyze sample.exe \
+python -m sentinel analyze "C:/Samples/sample.exe" \
     --format json \
-    --output report.json \
+    --output "C:/SIEM/report.json" \
     --no-dynamic  # Static analysis only for speed
 ```
 
