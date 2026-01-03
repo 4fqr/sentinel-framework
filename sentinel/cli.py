@@ -24,6 +24,7 @@ from sentinel.core.monitor import BehaviorMonitor
 from sentinel.core.events import BehaviorEvent, EventSeverity
 from sentinel.core.analyzer import MalwareAnalyzer
 from sentinel.core.reporter import ReportGenerator
+from sentinel.ui import AnalysisDisplay, ResultsDisplay, show_banner, console
 from sentinel.utils.logger import SentinelLogger, get_logger
 from sentinel.config import config
 from sentinel import __version__
@@ -36,17 +37,7 @@ logger = get_logger(__name__)
 
 def print_banner():
     """Print Sentinel Framework banner"""
-    banner = """
-+=================================================================+
-|                                                                 |
-|   SENTINEL FRAMEWORK                                            |
-|   Malware Analysis Sandbox - Version {}                        |
-|   Open-Source | Behavioral Monitoring | Automated              |
-|                                                                 |
-+=================================================================+
-    """.format(__version__)
-    
-    console.print(banner, style="bold cyan")
+    show_banner()
 
 
 class LiveMonitor:
@@ -384,11 +375,14 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
         analyzer = MalwareAnalyzer()
         
         if live:
-            # Live monitoring mode
-            live_monitor = LiveMonitor()
+            # Live monitoring mode with new rich display
+            live_display = AnalysisDisplay()
             
             # Register callback for live updates
-            analyzer.monitor.register_callback(live_monitor.update_event)
+            def update_callback(event):
+                live_display.update_event(event)
+            
+            analyzer.monitor.register_callback(update_callback)
             
             # Set very long timeout for live mode (user will stop manually)
             live_timeout = 7200  # 2 hours max, but user stops with Ctrl+C
@@ -398,18 +392,13 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
             console.print(f"[bold yellow]Press Ctrl+C when done to stop and analyze results[/bold yellow]\n")
             
             try:
-                # Start static analysis first
-                console.print(f"[dim]Running static analysis...[/dim]")
-                analyzer_instance = analyzer
-                
-                # Do static analysis synchronously
+                # Start dynamic analysis in thread
                 import threading
                 
-                # Run dynamic analysis in thread
                 def start_dynamic():
                     time.sleep(1)  # Brief delay
-                    analyzer_instance.monitor.start()
-                    analyzer_instance.sandbox.execute(str(sample_path), timeout=live_timeout)
+                    analyzer.monitor.start()
+                    analyzer.sandbox.execute(str(sample_path), timeout=live_timeout)
                 
                 dynamic_thread = threading.Thread(target=start_dynamic, daemon=True)
                 dynamic_thread.start()
@@ -420,10 +409,10 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
                 console.print(f"[green]✓[/green] Monitoring active - application running in background")
                 console.print(f"[bold yellow]→ Press Ctrl+C anytime to stop and see results[/bold yellow]\n")
                 
-                # Live display loop - runs FOREVER until Ctrl+C (ignore analysis completion)
-                with Live(live_monitor.generate_display(), refresh_per_second=2, console=console) as live_display:
+                # Live display loop - runs FOREVER until Ctrl+C
+                with Live(live_display.generate_layout("Monitoring"), refresh_per_second=2, console=console) as live:
                     while True:  # Loop forever until Ctrl+C
-                        live_display.update(live_monitor.generate_display())
+                        live.update(live_display.generate_layout("Monitoring"))
                         time.sleep(0.5)
                 
             except KeyboardInterrupt:
@@ -464,8 +453,8 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
                 
                 progress.update(task, completed=True)
         
-        # Display results
-        display_results(result)
+        # Display results using new rich display system
+        ResultsDisplay.show_results(result)
         
         # Generate report
         if format or output:

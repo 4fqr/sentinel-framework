@@ -23,6 +23,8 @@ from sentinel.analyzers.document_analyzer import DocumentAnalyzer
 from sentinel.analyzers.deep_pe_analyzer import DeepPEAnalyzer
 from sentinel.analyzers.file_type_detector import UniversalFileDetector
 from sentinel.analyzers.string_extractor import AdvancedStringExtractor
+from sentinel.core.threat_scoring import ThreatScorer, ThreatEvidence, ThreatLevel
+from sentinel.forensics import MemoryForensics, NetworkForensics, FileSystemForensics
 from sentinel.utils.logger import get_logger
 from sentinel.utils.helpers import get_file_hashes, get_file_type, format_bytes
 from sentinel.config import config
@@ -78,6 +80,14 @@ class MalwareAnalyzer:
         # Initialize detectors
         self.detectors = []
         self._initialize_detectors()
+        
+        # Initialize forensics engines
+        self.memory_forensics = MemoryForensics()
+        self.network_forensics = NetworkForensics()
+        self.filesystem_forensics = FileSystemForensics()
+        
+        # Initialize threat scorer
+        self.threat_scorer = ThreatScorer()
         
         logger.info("Malware analyzer initialized")
     
@@ -685,7 +695,7 @@ class MalwareAnalyzer:
     
     def _calculate_verdict(self, result: AnalysisResult) -> tuple[str, int]:
         """
-        Calculate final verdict and risk score
+        Calculate final verdict and risk score using intelligent threat scoring
         
         Args:
             result: Analysis result
@@ -693,52 +703,62 @@ class MalwareAnalyzer:
         Returns:
             Tuple of (verdict, risk_score)
         """
-        risk_score = 0
-        critical_detections = 0
-        high_detections = 0
+        # Reset threat scorer for this analysis
+        self.threat_scorer = ThreatScorer()
         
-        # Base score from detections (weighted properly)
+        # Add all detections to scorer
         for detection in result.threat_detections:
-            confidence = detection.get('confidence', 0)
-            severity = detection.get('severity', 'low')
+            self.threat_scorer.add_detection(detection)
+        
+        # Set static indicators for multiplier calculation
+        static_indicators = {
+            'packer_detected': False,
+            'high_entropy_sections': [],
+            'suspicious_api_count': 0,
+            'has_signature': False,
+            'suspicious_string_count': 0
+        }
+        
+        # Extract static indicators
+        if 'deep_pe_analysis' in result.static_analysis:
+            pe_data = result.static_analysis['deep_pe_analysis']
             
-            # Weight by severity and confidence
-            if severity == 'critical':
-                risk_score += confidence * 0.7  # Max 70 points per critical
-                critical_detections += 1
-            elif severity == 'high':
-                risk_score += confidence * 0.4  # Max 40 points per high
-                high_detections += 1
-            elif severity == 'medium':
-                risk_score += confidence * 0.2  # Max 20 points per medium
-            else:  # low
-                risk_score += confidence * 0.1  # Max 10 points per low
+            if pe_data.get('packer_detection', {}).get('detected'):
+                static_indicators['packer_detected'] = True
+            
+            if pe_data.get('entropy_analysis', {}).get('high_entropy_sections'):
+                static_indicators['high_entropy_sections'] = pe_data['entropy_analysis']['high_entropy_sections']
+            
+            if pe_data.get('import_analysis', {}).get('suspicious_imports'):
+                static_indicators['suspicious_api_count'] = len(pe_data['import_analysis']['suspicious_imports'])
+            
+            if pe_data.get('certificate_analysis', {}).get('is_signed'):
+                static_indicators['has_signature'] = True
         
-        # Small bonus for dangerous APIs (only if many)
-        if 'dangerous_imports' in result.static_analysis:
-            dangerous_count = len(result.static_analysis['dangerous_imports'])
-            if dangerous_count > 15:  # Only flag if many dangerous APIs
-                risk_score += min(10, dangerous_count * 0.5)  # Cap at 10 points
+        if 'strings_analysis' in result.static_analysis:
+            strings_data = result.static_analysis['strings_analysis']
+            if strings_data.get('suspicious_keywords'):
+                static_indicators['suspicious_string_count'] = len(strings_data['suspicious_keywords'])
         
-        # Small bonus for suspicious indicators
-        if 'suspicious_indicators' in result.static_analysis:
-            risk_score += min(5, len(result.static_analysis['suspicious_indicators']))  # Cap at 5 points
+        self.threat_scorer.set_static_indicators(static_indicators)
         
-        # Reduce score significantly if no critical detections
-        if critical_detections == 0:
-            risk_score = risk_score * 0.4  # Reduce by 60% if no critical threats
+        # Calculate score with intelligence
+        risk_score, threat_level, confidence = self.threat_scorer.calculate_score()
         
-        # Determine verdict (stricter thresholds)
-        if risk_score >= 70 and critical_detections >= 1:
-            verdict = "Malicious"
-        elif risk_score >= 50 and (critical_detections >= 1 or high_detections >= 2):
-            verdict = "Suspicious"
-        elif risk_score >= 30:
-            verdict = "Potentially Unwanted"
-        else:
-            verdict = "Clean"
+        # Map threat level to verdict string
+        verdict_map = {
+            ThreatLevel.CLEAN: "Clean",
+            ThreatLevel.SUSPICIOUS: "Suspicious",
+            ThreatLevel.LIKELY_MALICIOUS: "Likely Malicious",
+            ThreatLevel.MALICIOUS: "Malicious",
+            ThreatLevel.CRITICAL: "Critical Threat"
+        }
         
-        return verdict, min(int(risk_score), 100)
+        verdict = verdict_map.get(threat_level, "Unknown")
+        
+        logger.info(f"Threat scoring: {risk_score}/100, Level: {threat_level.value}, Confidence: {confidence:.2f}")
+        
+        return verdict, risk_score
     
     def cleanup(self) -> None:
         """Cleanup analyzer resources"""
