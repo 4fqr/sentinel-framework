@@ -89,6 +89,7 @@ class SandboxEngine:
         self.state = SandboxState.IDLE
         self.timeout = self.config.get('timeout', 300)
         self.network_mode = self.config.get('network_mode', 'isolated')
+        self.running_process = None  # Store running process for live monitoring
         
         # Initialize sandbox backend
         self._initialize_backend()
@@ -277,21 +278,34 @@ class SandboxEngine:
             
             self.state = SandboxState.RUNNING
             
-            # Execute process with timeout
-            result = subprocess.run(
+            # Launch process in background (non-blocking for live monitoring)
+            process = subprocess.Popen(
                 cmd,
-                capture_output=True,
-                timeout=timeout,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 env=env,
                 cwd=os.path.dirname(sample_path),
             )
             
+            # Store process for potential termination
+            self.running_process = process
+            
+            # Wait for timeout or until process exits
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+                exit_code = process.returncode
+            except subprocess.TimeoutExpired:
+                # Process still running after timeout - this is expected for live monitoring
+                logger.debug(f"Process still running after {timeout}s - live monitoring mode")
+                stdout, stderr = b'', b''
+                exit_code = None
+            
             return SandboxResult(
                 success=True,
                 execution_time=0,  # Will be set by caller
-                exit_code=result.returncode,
-                stdout=result.stdout.decode('utf-8', errors='ignore'),
-                stderr=result.stderr.decode('utf-8', errors='ignore'),
+                exit_code=exit_code,
+                stdout=stdout.decode('utf-8', errors='ignore'),
+                stderr=stderr.decode('utf-8', errors='ignore'),
             )
             
         except subprocess.TimeoutExpired:
@@ -305,6 +319,23 @@ class SandboxEngine:
         except Exception as e:
             logger.error(f"Process execution failed: {e}")
             return SandboxResult(success=False, execution_time=0, error=str(e))
+    
+    def terminate_running_process(self) -> None:
+        """Terminate any running process (for live monitoring)"""
+        if self.running_process and self.running_process.poll() is None:
+            logger.info("Terminating running process for analysis")
+            try:
+                self.running_process.terminate()
+                # Wait up to 5 seconds for graceful termination
+                self.running_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                # Force kill if it doesn't terminate
+                logger.warning("Process did not terminate gracefully, forcing kill")
+                self.running_process.kill()
+            except Exception as e:
+                logger.error(f"Failed to terminate process: {e}")
+            finally:
+                self.running_process = None
     
     def create_snapshot(self, name: str) -> bool:
         """
@@ -341,6 +372,9 @@ class SandboxEngine:
     def cleanup(self) -> None:
         """Cleanup sandbox resources"""
         logger.info("Cleaning up sandbox resources")
+        
+        # Terminate any running process
+        self.terminate_running_process()
         
         if self.sandbox_type == SandboxType.DOCKER:
             try:

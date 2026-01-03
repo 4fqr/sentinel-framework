@@ -389,17 +389,29 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
             # Register callback for live updates
             analyzer.monitor.register_callback(live_monitor.update_event)
             
-            with Live(live_monitor.generate_display(), refresh_per_second=2, console=console) as live_display:
-                # Run analysis
-                result = analyzer.analyze(
-                    str(sample_path),
-                    enable_static=not no_static,
-                    enable_dynamic=not no_dynamic,
-                    timeout=timeout
-                )
+            console.print(f"\n[bold cyan]🔴 LIVE MONITORING MODE[/bold cyan]")
+            console.print(f"[dim]Application will run in background while we monitor behavior[/dim]")
+            console.print(f"[bold yellow]Press Ctrl+C when done to stop and analyze results[/bold yellow]\n")
+            
+            try:
+                with Live(live_monitor.generate_display(), refresh_per_second=2, console=console) as live_display:
+                    # Run analysis
+                    result = analyzer.analyze(
+                        str(sample_path),
+                        enable_static=not no_static,
+                        enable_dynamic=not no_dynamic,
+                        timeout=timeout
+                    )
+                    
+                    # Update display one last time
+                    live_display.update(live_monitor.generate_display())
+            except KeyboardInterrupt:
+                console.print(f"\n\n[bold yellow]⏹️  Stopping live monitoring...[/bold yellow]")
+                analyzer.sandbox.terminate_running_process()
+                analyzer.monitor.stop()
+                console.print(f"[green]✓[/green] Analysis stopped by user\n")
+                # Continue to show results
                 
-                # Update display one last time
-                live_display.update(live_monitor.generate_display())
         else:
             # Standard mode with progress bar
             with Progress(
