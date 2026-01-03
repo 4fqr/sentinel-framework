@@ -251,8 +251,13 @@ class ResultsDisplay:
         """Display comprehensive analysis results"""
         console.print("\n")
         
-        # Main verdict panel
+        # Main verdict panel (handles errors internally)
         ResultsDisplay._show_verdict(result)
+        
+        # If it's an error result, don't try to show other sections
+        if result.sample_hash == "error" or "Error:" in str(result.verdict):
+            console.print("\n[dim]Analysis could not be completed due to the error above.[/dim]\n")
+            return
         
         console.print("\n")
         
@@ -273,6 +278,24 @@ class ResultsDisplay:
     @staticmethod
     def _show_verdict(result: Any):
         """Show main verdict with risk score"""
+        # Check if this is an error result
+        is_error = result.sample_hash == "error" or "Error:" in str(result.verdict)
+        
+        if is_error:
+            # Simplified error display
+            error_msg = result.verdict if isinstance(result.verdict, str) else "Analysis failed"
+            
+            console.print(Panel(
+                f"[bold red]✗ ANALYSIS ERROR[/bold red]\n\n"
+                f"[yellow]{error_msg}[/yellow]\n\n"
+                f"File: {Path(result.sample_path).name}\n"
+                f"Path: {result.sample_path}",
+                title="[bold red]ERROR[/bold red]",
+                border_style="red",
+                expand=False
+            ))
+            return
+        
         icon, style, label = ThreatLevelIndicator.get_indicator(
             getattr(result, 'verdict', 'unknown')
         )
@@ -283,7 +306,7 @@ class ResultsDisplay:
         verdict_table.add_column("Value", style="bold white")
         
         verdict_table.add_row("File", Path(result.sample_path).name)
-        verdict_table.add_row("SHA256", result.sample_hash[:16] + "...")
+        verdict_table.add_row("SHA256", result.sample_hash[:16] + "..." if len(result.sample_hash) > 16 else result.sample_hash)
         verdict_table.add_row("File Type", result.file_type)
         verdict_table.add_row("Size", f"{result.file_size:,} bytes")
         verdict_table.add_row("", "")
@@ -299,10 +322,13 @@ class ResultsDisplay:
         )
         verdict_table.add_row("Analysis Time", f"{result.analysis_time:.2f}s")
         
+        # Extract border color from style (handles both 'color' and 'bold color' formats)
+        border_color = style.split()[-1] if ' ' in style else style
+        
         console.print(Panel(
             verdict_table,
             title="[bold white]ANALYSIS VERDICT[/bold white]",
-            border_style=style.split()[1] if ' on ' not in style else style.split()[1]
+            border_style=border_color
         ))
     
     @staticmethod
