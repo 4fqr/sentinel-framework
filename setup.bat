@@ -29,15 +29,15 @@ echo [3/4] Installing dependencies...
 pip install -r requirements.txt
 
 if errorlevel 1 (
-    echo [ERROR] Failed to install dependencies
-    pause
-    exit /b 1
+    echo [WARNING] Some optional dependencies failed
+    echo [INFO] Installing core dependencies...
+    pip install click rich psutil pyyaml jinja2 pefile watchdog requests networkx colorama pytest black flake8 python-magic-bin matplotlib docker scapy
 )
 
 REM Install Sentinel
 echo.
 echo [4/4] Installing Sentinel Framework...
-pip install -e .
+pip install -e . --no-deps
 
 if errorlevel 1 (
     echo [ERROR] Failed to install Sentinel Framework

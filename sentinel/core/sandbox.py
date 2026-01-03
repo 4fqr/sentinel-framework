@@ -5,13 +5,20 @@ Manages isolated execution environments for malware analysis
 
 import os
 import time
-import docker
 import logging
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from enum import Enum
+
+# Optional Docker import
+try:
+    import docker
+    HAS_DOCKER = True
+except ImportError:
+    HAS_DOCKER = False
+    print("Warning: Docker not available. Only process-based sandbox will work.")
 
 from sentinel.config import config
 from sentinel.utils.logger import get_logger
@@ -91,13 +98,18 @@ class SandboxEngine:
     def _initialize_backend(self) -> None:
         """Initialize sandbox backend based on type"""
         if self.sandbox_type == SandboxType.DOCKER:
+            if not HAS_DOCKER:
+                logger.warning("Docker library not available, falling back to process isolation")
+                self.sandbox_type = SandboxType.PROCESS
+                return
+            
             try:
                 self.docker_client = docker.from_env()
                 self.docker_client.ping()
                 logger.info("Docker backend initialized successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize Docker backend: {e}")
-                raise RuntimeError("Docker daemon not available. Please ensure Docker is running.")
+                logger.warning(f"Docker daemon not available: {e}. Falling back to process isolation.")
+                self.sandbox_type = SandboxType.PROCESS
         
         elif self.sandbox_type == SandboxType.PROCESS:
             logger.info("Process isolation backend initialized")

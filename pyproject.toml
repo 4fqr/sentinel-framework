@@ -30,14 +30,13 @@ dependencies = [
     "jinja2>=3.1.0",
     "pefile>=2023.2.7",
     "yara-python>=4.3.0",
-    "volatility3>=2.4.0",
     "docker>=6.0.0",
     "requests>=2.31.0",
+    "scapy>=2.5.0",
     "networkx>=3.0",
     "matplotlib>=3.7.0",
     "colorama>=0.4.6",
-    "python-magic>=0.4.27",
-    "ssdeep>=3.4",
+    "watchdog>=3.0.0",
 ]
 
 [project.optional-dependencies]

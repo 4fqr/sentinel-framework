@@ -9,7 +9,14 @@ import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-import magic
+
+# Optional imports with fallbacks
+try:
+    import magic
+    HAS_MAGIC = True
+except ImportError:
+    HAS_MAGIC = False
+    print("Warning: python-magic not available. File type detection will be limited.")
 
 
 def calculate_hash(file_path: str, algorithm: str = 'sha256') -> str:
@@ -61,22 +68,26 @@ def get_file_type(file_path: str) -> str:
     Returns:
         File type description
     """
-    try:
-        return magic.from_file(file_path)
-    except Exception:
-        # Fallback to extension-based detection
-        ext = Path(file_path).suffix.lower()
-        type_map = {
-            '.exe': 'Windows Executable',
-            '.dll': 'Windows Dynamic Link Library',
-            '.bat': 'Windows Batch File',
-            '.ps1': 'PowerShell Script',
-            '.vbs': 'VBScript',
-            '.js': 'JavaScript',
-            '.jar': 'Java Archive',
-            '.apk': 'Android Package',
-        }
-        return type_map.get(ext, 'Unknown')
+    # Try magic if available
+    if HAS_MAGIC:
+        try:
+            return magic.from_file(file_path)
+        except Exception:
+            pass
+    
+    # Fallback to extension-based detection
+    ext = Path(file_path).suffix.lower()
+    type_map = {
+        '.exe': 'Windows Executable',
+        '.dll': 'Windows Dynamic Link Library',
+        '.bat': 'Windows Batch File',
+        '.ps1': 'PowerShell Script',
+        '.vbs': 'VBScript',
+        '.js': 'JavaScript',
+        '.jar': 'Java Archive',
+        '.apk': 'Android Package',
+    }
+    return type_map.get(ext, 'Unknown')
 
 
 def format_bytes(size: int) -> str:

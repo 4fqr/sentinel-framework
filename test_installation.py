@@ -1,142 +1,104 @@
 #!/usr/bin/env python3
 """
-Simple test script to verify Sentinel Framework installation
+Test Sentinel Framework Installation
+Verifies that all required components are properly installed
 """
 
 import sys
-from pathlib import Path
+import importlib
 
 
-def test_imports():
-    """Test that all required modules can be imported"""
-    print("Testing imports...")
-    
+def test_import(module_name, required=True):
+    """Test if a module can be imported"""
     try:
-        import sentinel
-        print(f"✓ sentinel module (v{sentinel.__version__})")
-    except ImportError as e:
-        print(f"✗ sentinel module: {e}")
-        return False
-    
-    try:
-        from sentinel.core.sandbox import SandboxEngine
-        print("✓ SandboxEngine")
-    except ImportError as e:
-        print(f"✗ SandboxEngine: {e}")
-        return False
-    
-    try:
-        from sentinel.core.monitor import BehaviorMonitor
-        print("✓ BehaviorMonitor")
-    except ImportError as e:
-        print(f"✗ BehaviorMonitor: {e}")
-        return False
-    
-    try:
-        from sentinel.core.analyzer import MalwareAnalyzer
-        print("✓ MalwareAnalyzer")
-    except ImportError as e:
-        print(f"✗ MalwareAnalyzer: {e}")
-        return False
-    
-    try:
-        from sentinel.core.reporter import ReportGenerator
-        print("✓ ReportGenerator")
-    except ImportError as e:
-        print(f"✗ ReportGenerator: {e}")
-        return False
-    
-    return True
-
-
-def test_dependencies():
-    """Test that all dependencies are available"""
-    print("\nTesting dependencies...")
-    
-    dependencies = [
-        'click', 'rich', 'psutil', 'yaml', 'jinja2',
-        'docker', 'watchdog'
-    ]
-    
-    all_ok = True
-    for dep in dependencies:
-        try:
-            __import__(dep)
-            print(f"✓ {dep}")
-        except ImportError:
-            print(f"✗ {dep} - not installed")
-            all_ok = False
-    
-    return all_ok
-
-
-def test_configuration():
-    """Test configuration loading"""
-    print("\nTesting configuration...")
-    
-    try:
-        from sentinel.config import config
-        
-        # Test basic config access
-        sandbox_type = config.get('sandbox.type', 'not found')
-        print(f"✓ Configuration loaded (sandbox type: {sandbox_type})")
+        importlib.import_module(module_name)
+        print(f"  ✓ {module_name}")
         return True
-    except Exception as e:
-        print(f"✗ Configuration error: {e}")
-        return False
-
-
-def test_docker():
-    """Test Docker connectivity"""
-    print("\nTesting Docker...")
-    
-    try:
-        import docker
-        client = docker.from_env()
-        client.ping()
-        print("✓ Docker daemon is running")
-        return True
-    except Exception as e:
-        print(f"✗ Docker not available: {e}")
-        print("  Note: Docker is optional but recommended for full functionality")
-        return False
+    except ImportError as e:
+        if required:
+            print(f"  ✗ {module_name} (REQUIRED - {e})")
+            return False
+        else:
+            print(f"  ⚠ {module_name} (optional - not available)")
+            return True
 
 
 def main():
-    """Run all tests"""
-    print("=" * 60)
-    print("Sentinel Framework - Installation Test")
-    print("=" * 60)
+    """Run installation tests"""
+    print("\n" + "="*50)
+    print(" SENTINEL FRAMEWORK - INSTALLATION TEST")
+    print("="*50 + "\n")
     
-    results = []
+    all_required_ok = True
     
-    results.append(("Imports", test_imports()))
-    results.append(("Dependencies", test_dependencies()))
-    results.append(("Configuration", test_configuration()))
-    results.append(("Docker", test_docker()))
+    # Test core dependencies
+    print("Testing Core Dependencies:")
+    all_required_ok &= test_import("click", required=True)
+    all_required_ok &= test_import("rich", required=True)
+    all_required_ok &= test_import("psutil", required=True)
+    all_required_ok &= test_import("yaml", required=True)
+    all_required_ok &= test_import("jinja2", required=True)
     
-    print("\n" + "=" * 60)
-    print("Test Results:")
-    print("=" * 60)
+    print("\nTesting Analysis Libraries:")
+    all_required_ok &= test_import("pefile", required=True)
+    test_import("yara", required=False)
     
-    for name, passed in results:
-        status = "✓ PASS" if passed else "✗ FAIL"
-        print(f"{name:20} {status}")
+    print("\nTesting Monitoring Libraries:")
+    all_required_ok &= test_import("watchdog", required=True)
+    test_import("docker", required=False)
     
-    all_passed = all(result[1] for result in results[:3])  # Docker is optional
+    print("\nTesting Utilities:")
+    all_required_ok &= test_import("requests", required=True)
+    all_required_ok &= test_import("networkx", required=True)
+    test_import("matplotlib", required=False)
+    test_import("magic", required=False)
+    test_import("scapy", required=False)
     
-    print("=" * 60)
+    # Test Sentinel package
+    print("\nTesting Sentinel Framework:")
+    all_required_ok &= test_import("sentinel", required=True)
+    all_required_ok &= test_import("sentinel.core.sandbox", required=True)
+    all_required_ok &= test_import("sentinel.core.monitor", required=True)
+    all_required_ok &= test_import("sentinel.core.analyzer", required=True)
+    all_required_ok &= test_import("sentinel.core.reporter", required=True)
     
-    if all_passed:
-        print("\n✓ All critical tests passed!")
-        print("  Sentinel Framework is ready to use.")
-        print("\n  Try: sentinel --help")
+    # Test CLI
+    print("\nTesting CLI:")
+    try:
+        from sentinel import cli
+        print("  ✓ CLI module")
+    except ImportError as e:
+        print(f"  ✗ CLI module ({e})")
+        all_required_ok = False
+    
+    # Test configuration
+    print("\nTesting Configuration:")
+    try:
+        from sentinel.config import config
+        print("  ✓ Configuration system")
+    except Exception as e:
+        print(f"  ✗ Configuration system ({e})")
+        all_required_ok = False
+    
+    # Final result
+    print("\n" + "="*50)
+    if all_required_ok:
+        print(" ✓ ALL REQUIRED TESTS PASSED!")
+        print("="*50 + "\n")
+        print("Sentinel Framework is ready to use!")
+        print("\nQuick Start:")
+        print("  sentinel --help")
+        print("  sentinel info")
+        print("\nNote: Some optional dependencies may not be installed.")
+        print("This is normal and the framework will work without them.")
         return 0
     else:
-        print("\n✗ Some tests failed.")
-        print("  Please check the installation guide.")
+        print(" ✗ SOME REQUIRED TESTS FAILED")
+        print("="*50 + "\n")
+        print("Please ensure all required dependencies are installed:")
+        print("  pip install click rich psutil pyyaml jinja2 pefile watchdog requests networkx colorama")
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

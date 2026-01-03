@@ -22,9 +22,10 @@ matplotlib>=3.7.0
 
 # Utilities
 colorama>=0.4.6
-python-magic-bin>=0.4.14
+python-magic-bin>=0.4.14; platform_system == "Windows"
+python-magic>=0.4.27; platform_system != "Windows"
 watchdog>=3.0.0
-pythonnet>=3.0.0
+pythonnet>=3.0.0; platform_system == "Windows"
 
 # Development
 pytest>=7.0.0
