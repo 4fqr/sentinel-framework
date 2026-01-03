@@ -363,6 +363,12 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
     
     # Check if it's a directory
     if sample_path.is_dir():
+        if not recursive:
+            console.print(f"\n[bold yellow]⚠ Warning:[/bold yellow] '{sample_path}' is a directory")
+            console.print(f"Use [cyan]--recursive[/cyan] flag to analyze all files in the directory:\n")
+            console.print(f"  [cyan]python -m sentinel analyze \"{sample_path}\" --recursive[/cyan]\n")
+            raise click.Abort()
+        
         _analyze_directory(
             sample_path, timeout, no_static, no_dynamic, 
             format, output, live, recursive, parallel, extensions
