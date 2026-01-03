@@ -14,10 +14,32 @@ from collections import defaultdict, Counter
 import re
 import json
 
+import warnings
+import logging
+
+# Suppress scapy warnings about missing libpcap
+warnings.filterwarnings('ignore', message='.*libpcap.*')
+warnings.filterwarnings('ignore', message='.*pcap.*')
+logging.getLogger('scapy').setLevel(logging.ERROR)
+
 try:
+    # Suppress scapy's startup warnings
+    import sys
+    import os
+    
+    # Redirect stderr temporarily to suppress scapy warnings
+    stderr_backup = sys.stderr
+    sys.stderr = open(os.devnull, 'w')
+    
     import scapy.all as scapy
     HAS_SCAPY = True
+    
+    # Restore stderr
+    sys.stderr.close()
+    sys.stderr = stderr_backup
 except ImportError:
+    HAS_SCAPY = False
+except Exception:
     HAS_SCAPY = False
 
 
@@ -467,11 +489,13 @@ class NetworkForensics:
     def export_pcap(self, output_file: str) -> bool:
         """Export captured traffic to PCAP file"""
         if not HAS_SCAPY:
+            # PCAP export not available without scapy
+            # Network forensics still works for analysis, just can't export PCAP
             return False
         
         try:
             # This would use scapy to write packets to PCAP
-            # Simplified placeholder
+            # Simplified placeholder - full implementation would write actual packets
             return True
         except Exception:
             return False

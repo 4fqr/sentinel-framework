@@ -2,6 +2,22 @@
 Sentinel Framework - Open-source malware analysis sandbox
 """
 
+import warnings
+import logging
+
+# Suppress common warnings from optional dependencies
+warnings.filterwarnings('ignore', message='.*libpcap.*')
+warnings.filterwarnings('ignore', message='.*pcap.*')
+warnings.filterwarnings('ignore', message='.*Npcap.*')
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+# Suppress scapy logging if present
+try:
+    logging.getLogger('scapy').setLevel(logging.ERROR)
+    logging.getLogger('scapy.runtime').setLevel(logging.ERROR)
+except:
+    pass
+
 __version__ = "1.0.0"
 __author__ = "Sentinel Framework Contributors"
 __license__ = "MIT"

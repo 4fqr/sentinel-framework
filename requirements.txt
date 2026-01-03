@@ -14,7 +14,10 @@ docker>=6.0.0
 
 # Network Analysis
 requests>=2.31.0
-scapy>=2.5.0
+# Note: Scapy is optional for PCAP export. Network forensics works without it.
+# On Windows, scapy requires Npcap (https://npcap.com/) for packet capture.
+# If you see "No libpcap provider" warnings, you can safely ignore them.
+# scapy>=2.5.0  # Optional - uncomment if you need PCAP export functionality
 
 # Visualization
 networkx>=3.0
