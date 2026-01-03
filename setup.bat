@@ -37,12 +37,29 @@ if errorlevel 1 (
 REM Install Sentinel
 echo.
 echo [4/4] Installing Sentinel Framework...
-pip install -e . --no-deps
+pip uninstall sentinel-framework -y >nul 2>&1
+pip install -e .
 
 if errorlevel 1 (
     echo [ERROR] Failed to install Sentinel Framework
     pause
     exit /b 1
+)
+
+REM Configure PATH
+echo.
+echo [5/5] Configuring PATH...
+for /f "tokens=*" %%i in ('python -c "import sys; print(sys.executable.replace('python.exe', 'Scripts'))"') do set SCRIPTS_DIR=%%i
+echo Scripts directory: %SCRIPTS_DIR%
+
+REM Check if already in PATH
+echo %PATH% | find /i "%SCRIPTS_DIR%" >nul
+if errorlevel 1 (
+    echo Adding to PATH...
+    setx PATH "%PATH%;%SCRIPTS_DIR%" >nul 2>&1
+    echo [OK] PATH updated. Please restart your terminal.
+) else (
+    echo [OK] Already in PATH
 )
 
 REM Verify installation
@@ -67,15 +84,22 @@ if errorlevel 1 (
     echo Sentinel Framework is ready to use.
     echo.
     echo Quick Start:
+    echo   sentinel --help              (after restarting terminal)
+    echo   sentinel info
+    echo   sentinel analyze sample.exe --live
+    echo   sentinel analyze /samples --recursive --parallel 4
+    echo.
+    echo OR use Python module syntax:
     echo   python -m sentinel --help
     echo   python -m sentinel info
-    echo   python -m sentinel analyze sample.exe --live
     echo.
     echo Documentation:
     echo   README.md - Full documentation
     echo   QUICKSTART.md - Quick start guide
     echo   INSTALL.md - Installation details
+    echo   WINDOWS_COMPATIBILITY.md - Windows-specific guide
     echo.
 )
 
 pause
+

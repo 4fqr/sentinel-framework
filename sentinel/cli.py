@@ -6,7 +6,9 @@ Sleek CLI with real-time telemetry and rich formatting
 import sys
 import click
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.panel import Panel
@@ -134,6 +136,163 @@ class LiveMonitor:
         return layout
 
 
+def _collect_samples(directory: Path, recursive: bool, extensions: tuple) -> List[Path]:
+    """Collect sample files from directory"""
+    samples = []
+    
+    # Default extensions if none specified
+    if not extensions:
+        extensions = ('.exe', '.dll', '.sys', '.pdf', '.doc', '.docx', '.xls', '.xlsx', 
+                     '.zip', '.rar', '.jar', '.apk', '.elf', '.so', '.dylib')
+    
+    pattern = '**/*' if recursive else '*'
+    
+    for file_path in directory.glob(pattern):
+        if file_path.is_file() and file_path.suffix.lower() in extensions:
+            samples.append(file_path)
+    
+    return sorted(samples)
+
+
+def _analyze_single_sample(sample_path: Path, timeout, no_static, no_dynamic, format, output_dir):
+    """Analyze a single sample (for parallel execution)"""
+    try:
+        analyzer = MalwareAnalyzer()
+        
+        result = analyzer.analyze(
+            sample_path=sample_path,
+            static_analysis=not no_static,
+            dynamic_analysis=not no_dynamic,
+            timeout=timeout or config.get('analysis.timeout', 300)
+        )
+        
+        # Generate report
+        reporter = ReportGenerator()
+        report_format = format or config.get('reporting.format', 'html')
+        
+        # Use output_dir if specified, otherwise default reports directory
+        if output_dir:
+            output_path = Path(output_dir) / f"{sample_path.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{report_format}"
+        else:
+            output_path = None
+        
+        report_path = reporter.generate_report(result, format=report_format, output_path=output_path)
+        
+        return {
+            'sample': sample_path.name,
+            'success': True,
+            'threat_level': result.threat_level,
+            'threats': len(result.threat_detections),
+            'report': report_path
+        }
+    except Exception as e:
+        return {
+            'sample': sample_path.name,
+            'success': False,
+            'error': str(e)
+        }
+
+
+def _analyze_directory(directory: Path, timeout, no_static, no_dynamic, format, output, live, recursive, parallel, extensions):
+    """Analyze all samples in a directory"""
+    console.print(f"\n[bold cyan]=== Directory Analysis ===[/bold cyan]")
+    console.print(f"Directory: [yellow]{directory}[/yellow]")
+    console.print(f"Recursive: [yellow]{'Yes' if recursive else 'No'}[/yellow]")
+    console.print(f"Workers: [yellow]{parallel}[/yellow]\n")
+    
+    # Collect samples
+    console.print("[bold]Collecting samples...[/bold]")
+    samples = _collect_samples(directory, recursive, extensions)
+    
+    if not samples:
+        console.print("[yellow]No samples found matching criteria[/yellow]")
+        return
+    
+    console.print(f"Found [bold green]{len(samples)}[/bold green] samples to analyze\n")
+    
+    # Create output directory
+    output_dir = Path(output) if output else Path("reports") / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    results = []
+    
+    # Progress tracking (without spinner to avoid Unicode issues on Windows)
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        TimeElapsedColumn(),
+        console=console
+    ) as progress:
+        
+        task = progress.add_task("[cyan]Analyzing samples...", total=len(samples))
+        
+        if parallel > 1:
+            # Parallel execution
+            with ThreadPoolExecutor(max_workers=parallel) as executor:
+                futures = {
+                    executor.submit(_analyze_single_sample, sample, timeout, no_static, no_dynamic, format, output_dir): sample
+                    for sample in samples
+                }
+                
+                for future in as_completed(futures):
+                    result = future.result()
+                    results.append(result)
+                    progress.advance(task)
+        else:
+            # Sequential execution
+            for sample in samples:
+                result = _analyze_single_sample(sample, timeout, no_static, no_dynamic, format, output_dir)
+                results.append(result)
+                progress.advance(task)
+    
+    # Display summary
+    console.print(f"\n[bold cyan]=== Analysis Complete ===[/bold cyan]\n")
+    
+    # Summary table (use SIMPLE box to avoid Unicode issues on Windows)
+    summary_table = Table(title="Analysis Summary", box=box.SIMPLE)
+    summary_table.add_column("Sample", style="cyan")
+    summary_table.add_column("Status", style="green")
+    summary_table.add_column("Threat Level", style="yellow")
+    summary_table.add_column("Threats", justify="right")
+    
+    successful = 0
+    failed = 0
+    critical_threats = 0
+    
+    for result in results:
+        if result['success']:
+            successful += 1
+            status = "[OK]"
+            threat_level = result['threat_level']
+            threats = str(result['threats'])
+            if result['threats'] > 0:
+                critical_threats += 1
+        else:
+            failed += 1
+            status = "[FAIL]"
+            threat_level = "Error"
+            threats = "-"
+        
+        summary_table.add_row(
+            result['sample'],
+            status,
+            threat_level,
+            threats
+        )
+    
+    console.print(summary_table)
+    
+    # Statistics
+    console.print(f"\n[bold]Statistics:[/bold]")
+    console.print(f"  Total Samples: {len(samples)}")
+    console.print(f"  Successful: [green]{successful}[/green]")
+    console.print(f"  Failed: [red]{failed}[/red]")
+    console.print(f"  Threats Detected: [red]{critical_threats}[/red]")
+    console.print(f"\n[bold]Reports saved to:[/bold] [cyan]{output_dir}[/cyan]\n")
+
+
 @click.group()
 @click.version_option(version=__version__)
 def cli():
@@ -152,21 +311,46 @@ def cli():
 @click.option('--no-static', is_flag=True, help='Disable static analysis')
 @click.option('--no-dynamic', is_flag=True, help='Disable dynamic analysis')
 @click.option('--format', '-f', type=click.Choice(['html', 'json', 'markdown']), help='Report format')
-@click.option('--output', '-o', type=click.Path(), help='Output file path')
+@click.option('--output', '-o', type=click.Path(), help='Output directory path')
 @click.option('--live', is_flag=True, help='Show live analysis telemetry')
-def analyze(sample, timeout, no_static, no_dynamic, format, output, live):
+@click.option('--recursive', '-r', is_flag=True, help='Recursively analyze all files in directory')
+@click.option('--parallel', '-p', type=int, default=1, help='Number of parallel analysis workers (default: 1)')
+@click.option('--extensions', '-e', multiple=True, help='File extensions to analyze (e.g., .exe .dll .pdf)')
+def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recursive, parallel, extensions):
     """
-    Analyze a malware sample
+    Analyze a malware sample or entire directory
     
-    SAMPLE: Path to the sample file to analyze
+    SAMPLE: Path to the sample file or directory to analyze
+    
+    Examples:
+    \b
+      # Analyze single file
+      sentinel analyze malware.exe --live
+      
+      # Analyze entire directory
+      sentinel analyze /samples --recursive
+      
+      # Analyze with specific extensions
+      sentinel analyze /samples -r -e .exe -e .dll -e .pdf
+      
+      # Parallel analysis with 4 workers
+      sentinel analyze /samples -r --parallel 4
     """
     print_banner()
     
     sample_path = Path(sample)
     
-    console.print(f"\n[bold cyan]=== Analysis Target ===[/bold cyan]")
-    console.print(f"Sample: [yellow]{sample_path}[/yellow]")
-    console.print(f"Size: [yellow]{sample_path.stat().st_size:,}[/yellow] bytes\n")
+    # Check if it's a directory
+    if sample_path.is_dir():
+        _analyze_directory(
+            sample_path, timeout, no_static, no_dynamic, 
+            format, output, live, recursive, parallel, extensions
+        )
+    else:
+        # Single file analysis
+        console.print(f"\n[bold cyan]=== Analysis Target ===[/bold cyan]")
+        console.print(f"Sample: [yellow]{sample_path}[/yellow]")
+        console.print(f"Size: [yellow]{sample_path.stat().st_size:,}[/yellow] bytes\n")
     
     try:
         analyzer = MalwareAnalyzer()
@@ -192,7 +376,6 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live):
         else:
             # Standard mode with progress bar
             with Progress(
-                SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 BarColumn(),
                 TimeElapsedColumn(),
@@ -257,7 +440,7 @@ def display_results(result):
     if result.threat_detections:
         console.print(f"\n[bold red][!] Threat Detections ({len(result.threat_detections)}):[/bold red]")
         
-        detections_table = Table(show_header=True, box=box.ROUNDED)
+        detections_table = Table(show_header=True, box=box.SIMPLE)
         detections_table.add_column("Type", style="cyan")
         detections_table.add_column("Technique", style="yellow")
         detections_table.add_column("Confidence", justify="right", style="magenta")
@@ -309,7 +492,7 @@ def info():
     """Display Sentinel Framework information"""
     print_banner()
     
-    info_table = Table(show_header=False, box=box.ROUNDED)
+    info_table = Table(show_header=False, box=box.SIMPLE)
     info_table.add_column("Property", style="cyan")
     info_table.add_column("Value", style="yellow")
     
@@ -336,6 +519,112 @@ def info():
         console.print(f"  {monitor}")
 
 
+@cli.command(name="list-reports")
+@click.option('--format', '-f', type=click.Choice(['html', 'json', 'markdown', 'all']), default='all', help='Filter by report format')
+@click.option('--limit', '-l', type=int, default=20, help='Maximum number of reports to show')
+def list_reports(format, limit):
+    """List all generated analysis reports"""
+    reports_dir = Path(config.get('reporting.output_dir', 'reports'))
+    
+    if not reports_dir.exists():
+        console.print(f"[yellow]No reports directory found at: {reports_dir}[/yellow]")
+        return
+    
+    console.print(f"\n[bold cyan]=== Analysis Reports ===[/bold cyan]")
+    console.print(f"Location: [yellow]{reports_dir.absolute()}[/yellow]\n")
+    
+    # Collect reports
+    patterns = {
+        'html': '**/*.html',
+        'json': '**/*.json',
+        'markdown': '**/*.md',
+        'all': '**/*'
+    }
+    
+    pattern = patterns.get(format, '**/*')
+    reports = []
+    
+    for report_path in reports_dir.glob(pattern):
+        if report_path.is_file() and report_path.suffix in ['.html', '.json', '.md']:
+            reports.append({
+                'path': report_path,
+                'name': report_path.name,
+                'size': report_path.stat().st_size,
+                'modified': datetime.fromtimestamp(report_path.stat().st_mtime),
+                'type': report_path.suffix[1:].upper()
+            })
+    
+    if not reports:
+        console.print("[yellow]No reports found[/yellow]")
+        return
+    
+    # Sort by modification time (newest first)
+    reports.sort(key=lambda x: x['modified'], reverse=True)
+    
+    # Limit results
+    reports = reports[:limit]
+    
+    # Display table
+    table = Table(title=f"Found {len(reports)} reports", box=box.SIMPLE)
+    table.add_column("Report", style="cyan")
+    table.add_column("Type", style="magenta")
+    table.add_column("Size", justify="right", style="yellow")
+    table.add_column("Modified", style="green")
+    
+    for report in reports:
+        size_kb = report['size'] / 1024
+        size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb/1024:.1f} MB"
+        table.add_row(
+            report['name'],
+            report['type'],
+            size_str,
+            report['modified'].strftime('%Y-%m-%d %H:%M:%S')
+        )
+    
+    console.print(table)
+    console.print(f"\n[dim]Showing {len(reports)} most recent reports[/dim]\n")
+
+
+@cli.command(name="clean-reports")
+@click.option('--older-than', '-o', type=int, help='Delete reports older than N days')
+@click.option('--all', '-a', is_flag=True, help='Delete all reports')
+@click.confirmation_option(prompt='Are you sure you want to delete reports?')
+def clean_reports(older_than, all):
+    """Clean up old analysis reports"""
+    reports_dir = Path(config.get('reporting.output_dir', 'reports'))
+    
+    if not reports_dir.exists():
+        console.print("[yellow]No reports directory found[/yellow]")
+        return
+    
+    deleted = 0
+    total_size = 0
+    
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        console=console
+    ) as progress:
+        task = progress.add_task("[cyan]Cleaning reports...", total=None)
+        
+        for report_path in reports_dir.rglob('*'):
+            if report_path.is_file():
+                if all:
+                    size = report_path.stat().st_size
+                    report_path.unlink()
+                    deleted += 1
+                    total_size += size
+                elif older_than:
+                    age_days = (datetime.now() - datetime.fromtimestamp(report_path.stat().st_mtime)).days
+                    if age_days > older_than:
+                        size = report_path.stat().st_size
+                        report_path.unlink()
+                        deleted += 1
+                        total_size += size
+    
+    size_mb = total_size / (1024 * 1024)
+    console.print(f"\n[bold green]Deleted {deleted} reports[/bold green] ([yellow]{size_mb:.2f} MB[/yellow] freed)\n")
+
+
 def main():
     """Main entry point"""
     try:
@@ -347,3 +636,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

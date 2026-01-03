@@ -203,32 +203,204 @@ When running with `--live` mode, you get a beautiful real-time dashboard:
 
 ### Command Line Interface
 
-The Sentinel CLI provides a powerful and intuitive interface for malware analysis:
+Sentinel provides a comprehensive CLI for all your malware analysis needs. After installation, you can use either:
+- `sentinel <command>` - Direct command (after restarting terminal)
+- `python -m sentinel <command>` - Python module syntax (works immediately)
+
+#### 📋 **All Available Commands**
 
 ```bash
-# Show help
-sentinel --help
+# Get help
+sentinel --help              # Show all commands
+sentinel analyze --help      # Get help for specific command
 
-# Analyze a sample
-sentinel analyze SAMPLE [OPTIONS]
+# View version
+sentinel --version           # Display Sentinel version
 
-# View existing report
-sentinel view report.json
-
-# Show system information
-sentinel info
+# System information
+sentinel info                # Show configuration and enabled features
 ```
 
-### Analysis Options
+---
 
-| Option | Description |
-|--------|-------------|
-| `--timeout, -t` | Analysis timeout in seconds (default: 300) |
-| `--no-static` | Disable static analysis |
-| `--no-dynamic` | Disable dynamic analysis |
-| `--format, -f` | Report format: html, json, markdown |
-| `--output, -o` | Custom output file path |
-| `--live` | Show real-time telemetry during analysis |
+### 🔬 **Analyze Command** - Core Analysis Functionality
+
+#### Single File Analysis
+
+```bash
+# Basic analysis
+sentinel analyze malware.exe
+
+# With real-time monitoring dashboard (RECOMMENDED)
+sentinel analyze malware.exe --live
+
+# Custom timeout (in seconds)
+sentinel analyze malware.exe --timeout 600
+
+# Disable specific analysis types
+sentinel analyze malware.exe --no-static    # Skip static analysis
+sentinel analyze malware.exe --no-dynamic   # Skip dynamic execution
+
+# Specify report format
+sentinel analyze malware.exe --format html       # HTML report (default)
+sentinel analyze malware.exe --format json       # JSON for automation
+sentinel analyze malware.exe --format markdown   # Markdown documentation
+
+# Custom output location
+sentinel analyze malware.exe --output ./reports/analysis.html
+```
+
+#### 📂 **Directory Batch Analysis** - NEW!
+
+```bash
+# Analyze all files in a directory
+sentinel analyze ./samples --recursive
+
+# Analyze with specific file extensions
+sentinel analyze ./samples --recursive --extensions .exe --extensions .dll
+
+# Parallel analysis with multiple workers
+sentinel analyze ./samples --recursive --parallel 4
+
+# Complete example: recursive analysis with 8 workers, JSON output
+sentinel analyze ./malware_collection --recursive \
+    --parallel 8 \
+    --extensions .exe --extensions .dll --extensions .pdf \
+    --format json \
+    --output ./batch_reports
+
+# Supported extensions (auto-detected):
+# Executables: .exe, .dll, .sys
+# Documents: .pdf, .doc, .docx, .xls, .xlsx
+# Archives: .zip, .rar
+# Mobile: .apk, .jar
+# Linux: .elf, .so, .dylib
+```
+
+**Directory Analysis Features:**
+- ✅ Recursive directory traversal
+- ✅ Parallel processing (1-16 workers)
+- ✅ File extension filtering
+- ✅ Batch progress tracking
+- ✅ Aggregate statistics and summary
+- ✅ Individual reports for each sample
+- ✅ Automatic output directory creation
+
+---
+
+### 📊 **Report Management Commands**
+
+#### List Reports
+
+```bash
+# List all reports
+sentinel list-reports
+
+# Filter by format
+sentinel list-reports --format html
+sentinel list-reports --format json
+sentinel list-reports --format markdown
+
+# Limit results
+sentinel list-reports --limit 50
+
+# Example output:
+# ╔══════════════════════════════════════════════════╗
+# ║            Found 15 reports                      ║
+# ╠════════════════════╦═══════╦═════════╦═══════════╣
+# ║ Report             ║ Type  ║ Size    ║ Modified  ║
+# ╠════════════════════╬═══════╬═════════╬═══════════╣
+# ║ malware_20240103.. ║ HTML  ║ 245 KB  ║ 2024-01-03║
+# ║ sample_20240103... ║ JSON  ║ 89 KB   ║ 2024-01-03║
+# ╚════════════════════╩═══════╩═════════╩═══════════╝
+```
+
+#### View Reports
+
+```bash
+# View a specific report
+sentinel view reports/analysis_20240103_120000.json
+
+# Opens HTML reports in browser automatically
+sentinel view reports/malware_analysis.html
+```
+
+#### Clean Reports
+
+```bash
+# Delete old reports (with confirmation prompt)
+sentinel clean-reports --older-than 30    # Delete reports older than 30 days
+
+# Delete all reports (WARNING: asks for confirmation)
+sentinel clean-reports --all
+```
+
+---
+
+### 📝 **Analysis Options Reference**
+
+| Option | Short | Type | Description | Example |
+|--------|-------|------|-------------|---------|
+| `--timeout` | `-t` | Integer | Analysis timeout in seconds | `-t 600` |
+| `--no-static` | | Flag | Disable static analysis | `--no-static` |
+| `--no-dynamic` | | Flag | Disable dynamic analysis | `--no-dynamic` |
+| `--format` | `-f` | Choice | Report format (html/json/markdown) | `-f json` |
+| `--output` | `-o` | Path | Output file or directory path | `-o ./reports` |
+| `--live` | | Flag | Show real-time analysis dashboard | `--live` |
+| `--recursive` | `-r` | Flag | Analyze directory recursively | `-r` |
+| `--parallel` | `-p` | Integer | Number of parallel workers (1-16) | `-p 4` |
+| `--extensions` | `-e` | Multiple | File extensions to analyze | `-e .exe -e .dll` |
+
+---
+
+### 💡 **Usage Examples**
+
+#### Example 1: Quick Single File Analysis
+```bash
+# Analyze with live monitoring
+sentinel analyze suspicious.exe --live
+```
+
+#### Example 2: Batch Analysis of Malware Collection
+```bash
+# Analyze 100+ samples with 4 parallel workers
+sentinel analyze ./malware_samples \
+    --recursive \
+    --parallel 4 \
+    --format json \
+    --output ./analysis_reports
+```
+
+#### Example 3: Targeted Extension Analysis
+```bash
+# Only analyze executables and DLLs
+sentinel analyze ./mixed_files \
+    --recursive \
+    --extensions .exe \
+    --extensions .dll \
+    --parallel 8
+```
+
+#### Example 4: Long-Running Deep Analysis
+```bash
+# Extended timeout for complex malware
+sentinel analyze advanced_threat.exe \
+    --timeout 1800 \
+    --live \
+    --format html \
+    --output detailed_report.html
+```
+
+#### Example 5: Automation-Friendly JSON Output
+```bash
+# Generate machine-readable report for SIEM integration
+sentinel analyze sample.exe \
+    --format json \
+    --output report.json \
+    --no-dynamic  # Static analysis only for speed
+```
+
+---
 
 ### Configuration
 
