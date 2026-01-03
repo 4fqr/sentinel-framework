@@ -302,8 +302,16 @@ class SandboxEngine:
             # and wait for manual termination rather than timeout
             if timeout > 120:  # Live monitoring mode
                 logger.info("Live monitoring mode: Process launched, waiting for manual stop (Ctrl+C)")
-                # Don't wait for process to complete - let it run until user stops
-                # The CLI will handle Ctrl+C and call terminate_running_process()
+                # Don't wait for process - keep it running in background
+                # Just sleep briefly to let process initialize
+                time.sleep(1)
+                
+                # Check if process is still alive
+                if process.poll() is None:
+                    logger.info("Process is running in background")
+                else:
+                    logger.warning(f"Process exited quickly with code {process.returncode}")
+                
                 stdout, stderr = b'', b''
                 exit_code = None
             else:

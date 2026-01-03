@@ -29,13 +29,13 @@ class InjectionDetector:
             'cscript.exe', 'mshta.exe', 'rundll32.exe'
         ]
     
-    def detect(self, events: List[BehaviorEvent], analysis_result: Any) -> List[Dict[str, Any]]:
+    def detect(self, events: List[BehaviorEvent], static_analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Detect code injection patterns
         
         Args:
             events: List of behavioral events
-            analysis_result: Complete analysis result
+            static_analysis: Static analysis results dict
         
         Returns:
             List of detection results
@@ -43,7 +43,7 @@ class InjectionDetector:
         detections = []
         
         # Check for process injection APIs in imports
-        injection_detection = self._detect_injection_apis(analysis_result)
+        injection_detection = self._detect_injection_apis(static_analysis)
         if injection_detection:
             detections.append(injection_detection)
         
@@ -64,9 +64,8 @@ class InjectionDetector:
         
         return detections
     
-    def _detect_injection_apis(self, analysis_result: Any) -> Optional[Dict[str, Any]]:
+    def _detect_injection_apis(self, static_analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Detect presence of injection-related APIs"""
-        static_analysis = analysis_result.static_analysis
         suspicious_imports = static_analysis.get('suspicious_imports', [])
         
         injection_imports = []

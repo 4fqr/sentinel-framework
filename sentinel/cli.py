@@ -4,6 +4,7 @@ Sleek CLI with real-time telemetry and rich formatting
 """
 
 import sys
+import time
 import click
 from pathlib import Path
 from typing import Optional, List
@@ -397,23 +398,48 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
             console.print(f"[bold yellow]Press Ctrl+C when done to stop and analyze results[/bold yellow]\n")
             
             try:
-                with Live(live_monitor.generate_display(), refresh_per_second=2, console=console) as live_display:
-                    # Run analysis with extended timeout
-                    result = analyzer.analyze(
+                # Start analysis in background (non-blocking)
+                import threading
+                analysis_complete = threading.Event()
+                analysis_result = [None]
+                
+                def run_analysis():
+                    analysis_result[0] = analyzer.analyze(
                         str(sample_path),
                         enable_static=not no_static,
                         enable_dynamic=not no_dynamic,
-                        timeout=live_timeout  # Use extended timeout for live mode
+                        timeout=live_timeout
                     )
-                    
-                    # Update display one last time
-                    live_display.update(live_monitor.generate_display())
+                    analysis_complete.set()
+                
+                # Start analysis thread
+                analysis_thread = threading.Thread(target=run_analysis, daemon=True)
+                analysis_thread.start()
+                
+                # Wait for sandbox to start (brief delay)
+                time.sleep(2)
+                
+                # Live display loop - keep updating until Ctrl+C
+                with Live(live_monitor.generate_display(), refresh_per_second=2, console=console) as live_display:
+                    while not analysis_complete.is_set():
+                        live_display.update(live_monitor.generate_display())
+                        time.sleep(0.5)
+                
+                result = analysis_result[0]
+                
             except KeyboardInterrupt:
                 console.print(f"\n\n[bold yellow]⏹️  Stopping live monitoring...[/bold yellow]")
                 analyzer.sandbox.terminate_running_process()
                 analyzer.monitor.stop()
                 console.print(f"[green]✓[/green] Analysis stopped by user\n")
-                # Continue to show results
+                
+                # Get results after stopping
+                result = analyzer.analyze(
+                    str(sample_path),
+                    enable_static=not no_static,
+                    enable_dynamic=False,  # Already done
+                    timeout=1
+                )
                 
         else:
             # Standard mode with progress bar

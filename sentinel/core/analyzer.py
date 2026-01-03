@@ -176,9 +176,13 @@ class MalwareAnalyzer:
             sandbox_result = self.sandbox.execute(sample_path, timeout=timeout)
             result.sandbox_result = sandbox_result
             
-            # Stop monitoring
-            time.sleep(2)  # Allow time for final events
-            self.monitor.stop()
+            # For live mode (timeout > 120s), DON'T stop monitoring yet
+            # The CLI will handle Ctrl+C and stop monitoring manually
+            if timeout <= 120:
+                # Normal mode - stop monitoring after execution
+                time.sleep(2)  # Allow time for final events
+                self.monitor.stop()
+            # else: Live mode - monitoring stays active for Ctrl+C
             
             # Get behavioral events
             result.behavioral_events = [

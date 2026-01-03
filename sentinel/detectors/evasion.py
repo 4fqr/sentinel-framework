@@ -27,13 +27,13 @@ class EvasionDetector:
             'ollydbg', 'x64dbg', 'ida', 'ghidra'
         ]
     
-    def detect(self, events: List[BehaviorEvent], analysis_result: Any) -> List[Dict[str, Any]]:
+    def detect(self, events: List[BehaviorEvent], static_analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Detect evasion techniques
         
         Args:
             events: List of behavioral events
-            analysis_result: Complete analysis result
+            static_analysis: Static analysis results dict
         
         Returns:
             List of detection results
@@ -41,12 +41,12 @@ class EvasionDetector:
         detections = []
         
         # Check for VM detection attempts
-        vm_detection = self._detect_vm_checks(events, analysis_result)
+        vm_detection = self._detect_vm_checks(events, static_analysis)
         if vm_detection:
             detections.append(vm_detection)
         
         # Check for debugger detection
-        debugger_detection = self._detect_debugger_checks(events, analysis_result)
+        debugger_detection = self._detect_debugger_checks(events, static_analysis)
         if debugger_detection:
             detections.append(debugger_detection)
         
@@ -65,13 +65,12 @@ class EvasionDetector:
     def _detect_vm_checks(
         self,
         events: List[BehaviorEvent],
-        analysis_result: Any
+        static_analysis: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """Detect virtual machine detection attempts"""
         vm_indicators = []
         
-        # Check static strings for VM artifacts
-        static_analysis = analysis_result.static_analysis
+        # Check static strings for VM artifacts (static_analysis is already a dict)
         strings = static_analysis.get('strings', {})
         suspicious_strings = strings.get('suspicious', [])
         
@@ -107,11 +106,10 @@ class EvasionDetector:
     def _detect_debugger_checks(
         self,
         events: List[BehaviorEvent],
-        analysis_result: Any
+        static_analysis: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """Detect debugger detection attempts"""
-        # Check for debugger-related API imports
-        static_analysis = analysis_result.static_analysis
+        # Check for debugger-related API imports (static_analysis is already a dict)
         suspicious_imports = static_analysis.get('suspicious_imports', [])
         
         debugger_apis = [
