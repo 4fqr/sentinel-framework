@@ -1,0 +1,101 @@
+# Sentinel Framework Configuration
+
+# Sandbox Settings
+sandbox:
+  type: "docker"  # docker, vm, or process
+  timeout: 300  # seconds
+  network_mode: "isolated"  # isolated, monitored, or none
+  snapshot_enabled: true
+  restore_on_exit: true
+
+# Monitoring Settings
+monitoring:
+  file_system:
+    enabled: true
+    watch_paths:
+      - "C:\\Users"
+      - "C:\\Windows\\System32"
+      - "C:\\Program Files"
+      - "C:\\ProgramData"
+      - "%TEMP%"
+      - "%APPDATA%"
+    
+  process:
+    enabled: true
+    track_children: true
+    capture_cmdline: true
+    monitor_injection: true
+    
+  registry:
+    enabled: true
+    watch_keys:
+      - "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+      - "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+      - "HKEY_LOCAL_MACHINE\\System\\CurrentControlSet\\Services"
+      
+  network:
+    enabled: true
+    capture_packets: true
+    dns_logging: true
+    http_logging: true
+    ssl_inspection: false
+
+# Analysis Settings
+analysis:
+  static_analysis: true
+  dynamic_analysis: true
+  yara_rules_path: "rules/yara"
+  
+  # Threat Detection
+  detection:
+    ransomware:
+      enabled: true
+      sensitivity: "medium"  # low, medium, high
+    
+    c2_communication:
+      enabled: true
+      beaconing_threshold: 3
+      
+    code_injection:
+      enabled: true
+      techniques:
+        - "CreateRemoteThread"
+        - "QueueUserAPC"
+        - "ProcessHollowing"
+        - "AtomBombing"
+        
+    persistence:
+      enabled: true
+      
+    evasion:
+      enabled: true
+      detect_anti_vm: true
+      detect_anti_debug: true
+
+# Reporting Settings
+reporting:
+  format: "html"  # html, json, pdf, or markdown
+  output_dir: "reports"
+  include_screenshots: true
+  include_network_graph: true
+  include_timeline: true
+  verbosity: "detailed"  # minimal, normal, detailed
+  
+# Performance Settings
+performance:
+  max_concurrent_analyses: 2
+  memory_limit_mb: 4096
+  cpu_limit_percent: 80
+  
+# Security Settings
+security:
+  require_password: false
+  log_access: true
+  encrypted_storage: false
+  
+# Logging Settings
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/sentinel.log"
+  max_size_mb: 100
+  backup_count: 5
