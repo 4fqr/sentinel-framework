@@ -130,7 +130,7 @@ class ComprehensiveMalwareDetector:
         indicators = []
         
         # Check for periodic network beaconing
-        network_events = [e for e in events if hasattr(e, 'event_type') and 'network' in e.event_type]
+        network_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == EventType.NETWORK_CONNECTION]
         if len(network_events) > 10:
             indicators.append(f'{len(network_events)} network connections - potential C2 beaconing')
         

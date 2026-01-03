@@ -102,7 +102,7 @@ class TrojanDetector:
         
         # Check for browser injection
         browser_processes = ['chrome.exe', 'firefox.exe', 'msedge.exe', 'iexplore.exe']
-        process_events = [e for e in events if hasattr(e, 'event_type') and 'process' in e.event_type]
+        process_events = [e for e in events if hasattr(e, 'event_type') and e.event_type in [EventType.PROCESS_CREATED, EventType.PROCESS_TERMINATED]]
         
         for event in process_events:
             if hasattr(event, 'process_name'):
@@ -162,7 +162,7 @@ class TrojanDetector:
             indicators.append(f'{len(file_created)} files created after network activity')
         
         # Check for CreateProcess after download
-        process_created = [e for e in events if hasattr(e, 'event_type') and 'process_created' in e.event_type]
+        process_created = [e for e in events if hasattr(e, 'event_type') and e.event_type == EventType.PROCESS_CREATED]
         if process_created and network_activity:
             indicators.append('Process spawned after network connection - likely downloaded payload')
         
@@ -201,7 +201,7 @@ class TrojanDetector:
                     indicators.append('Low-level keyboard hook detected')
         
         # Check for file logging behavior
-        file_writes = [e for e in events if hasattr(e, 'event_type') and 'file_modified' in e.event_type or 'file_created' in e.event_type]
+        file_writes = [e for e in events if hasattr(e, 'event_type') and e.event_type in [EventType.FILE_MODIFIED, EventType.FILE_CREATED]]
         if len(file_writes) > 50:  # Frequent file writes = logging
             indicators.append(f'Excessive file writes ({len(file_writes)}) - consistent with keylogging')
         
