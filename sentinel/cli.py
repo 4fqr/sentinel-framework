@@ -463,17 +463,68 @@ def display_results(result):
     )
     console.print(verdict_panel)
     
+    # File Information
+    console.print(f"\n[bold cyan]📄 File Information:[/bold cyan]")
+    file_info_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+    file_info_table.add_column("Property", style="cyan", width=20)
+    file_info_table.add_column("Value", style="white")
+    
+    file_info_table.add_row("Sample Path", result.sample_path)
+    file_info_table.add_row("File Type", result.file_type)
+    file_info_table.add_row("File Size", f"{result.file_size:,} bytes ({result.file_size / 1024 / 1024:.2f} MB)")
+    file_info_table.add_row("SHA-256", result.sample_hash)
+    
+    console.print(file_info_table)
+    
+    # Static Analysis Results
+    if result.static_analysis:
+        console.print(f"\n[bold cyan]🔍 Static Analysis:[/bold cyan]")
+        static_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+        static_table.add_column("Property", style="cyan", width=20)
+        static_table.add_column("Value", style="white")
+        
+        if 'pe_info' in result.static_analysis:
+            pe_info = result.static_analysis['pe_info']
+            if 'machine_type' in pe_info:
+                static_table.add_row("Machine Type", pe_info['machine_type'])
+            if 'subsystem' in pe_info:
+                static_table.add_row("Subsystem", pe_info['subsystem'])
+            if 'compilation_timestamp' in pe_info:
+                static_table.add_row("Compiled", pe_info['compilation_timestamp'])
+            if 'entry_point' in pe_info:
+                static_table.add_row("Entry Point", f"0x{pe_info['entry_point']:08X}")
+        
+        if 'imports' in result.static_analysis:
+            imports = result.static_analysis['imports']
+            static_table.add_row("Imported DLLs", str(len(imports)))
+            
+            # Show suspicious imports
+            suspicious_apis = ['VirtualAlloc', 'WriteProcessMemory', 'CreateRemoteThread', 'LoadLibrary', 
+                             'GetProcAddress', 'VirtualProtect', 'NtQuerySystemInformation']
+            found_suspicious = []
+            for dll, funcs in imports.items():
+                for func in funcs:
+                    if any(sus in func for sus in suspicious_apis):
+                        found_suspicious.append(f"{dll}!{func}")
+            
+            if found_suspicious:
+                console.print(static_table)
+                console.print(f"\n  [bold yellow]⚠ Suspicious API Imports:[/bold yellow]")
+                for api in found_suspicious[:10]:  # Show first 10
+                    console.print(f"    • [yellow]{api}[/yellow]")
+                if len(found_suspicious) > 10:
+                    console.print(f"    [dim]... and {len(found_suspicious) - 10} more[/dim]")
+            else:
+                console.print(static_table)
+        else:
+            console.print(static_table)
+    
     # Threat detections
     if result.threat_detections:
-        console.print(f"\n[bold red][!] Threat Detections ({len(result.threat_detections)}):[/bold red]")
+        console.print(f"\n[bold red][!] Threat Detections ({len(result.threat_detections)}):[/bold red]\n")
         
-        detections_table = Table(show_header=True, box=box.SIMPLE)
-        detections_table.add_column("Type", style="cyan")
-        detections_table.add_column("Technique", style="yellow")
-        detections_table.add_column("Confidence", justify="right", style="magenta")
-        detections_table.add_column("Severity", justify="center")
-        
-        for detection in result.threat_detections:
+        for idx, detection in enumerate(result.threat_detections, 1):
+            # Detection header
             severity_style = {
                 'critical': 'bold red',
                 'high': 'bold yellow',
@@ -481,18 +532,54 @@ def display_results(result):
                 'low': 'cyan'
             }.get(detection['severity'], 'white')
             
-            detections_table.add_row(
-                detection['threat_type'],
-                detection['technique'],
-                f"{detection['confidence']}%",
-                f"[{severity_style}]{detection['severity'].upper()}[/{severity_style}]"
-            )
-        
-        console.print(detections_table)
+            console.print(f"[bold cyan]Detection #{idx}:[/bold cyan]")
+            
+            # Main info table
+            info_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
+            info_table.add_column("Property", style="cyan", width=15)
+            info_table.add_column("Value", style="white")
+            
+            info_table.add_row("Type", f"[bold]{detection['threat_type']}[/bold]")
+            info_table.add_row("Technique", detection['technique'])
+            info_table.add_row("Confidence", f"[magenta]{detection['confidence']}%[/magenta]")
+            info_table.add_row("Severity", f"[{severity_style}]{detection['severity'].upper()}[/{severity_style}]")
+            info_table.add_row("Description", detection.get('description', 'N/A'))
+            
+            console.print(info_table)
+            
+            # Evidence/Indicators
+            if 'indicators' in detection and detection['indicators']:
+                console.print(f"\n  [bold yellow]📋 Evidence:[/bold yellow]")
+                for key, value in detection['indicators'].items():
+                    formatted_key = key.replace('_', ' ').title()
+                    console.print(f"    • [cyan]{formatted_key}:[/cyan] {value}")
+            
+            # Reason if available
+            if 'reason' in detection:
+                console.print(f"\n  [bold yellow]💡 Reason:[/bold yellow] {detection['reason']}")
+            
+            console.print()  # Blank line between detections
     
-    # Event summary
+    # Behavioral Summary
     if result.behavioral_events:
-        console.print(f"\n[bold cyan]📊 Behavioral Events:[/bold cyan] {len(result.behavioral_events)} captured")
+        console.print(f"[bold cyan]📊 Behavioral Summary:[/bold cyan] {len(result.behavioral_events)} events captured\n")
+        
+        # Count events by type
+        event_counts = {}
+        for event in result.behavioral_events:
+            event_type = event.get('event_type', 'Unknown')
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
+        
+        if event_counts:
+            behavior_table = Table(show_header=True, box=box.SIMPLE)
+            behavior_table.add_column("Event Type", style="cyan")
+            behavior_table.add_column("Count", justify="right", style="yellow")
+            
+            for event_type, count in sorted(event_counts.items(), key=lambda x: x[1], reverse=True):
+                behavior_table.add_row(event_type.replace('_', ' ').title(), str(count))
+            
+            console.print(behavior_table)
+            console.print()
 
 
 @cli.command()
