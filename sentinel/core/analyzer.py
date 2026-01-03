@@ -644,40 +644,51 @@ class MalwareAnalyzer:
             Tuple of (verdict, risk_score)
         """
         risk_score = 0
+        critical_detections = 0
+        high_detections = 0
         
-        # Base score from detections
+        # Base score from detections (weighted properly)
         for detection in result.threat_detections:
             confidence = detection.get('confidence', 0)
             severity = detection.get('severity', 'low')
             
-            severity_multiplier = {
-                'low': 1,
-                'medium': 2,
-                'high': 3,
-                'critical': 4
-            }.get(severity, 1)
-            
-            risk_score += int(confidence * severity_multiplier)
+            # Weight by severity and confidence
+            if severity == 'critical':
+                risk_score += confidence * 0.7  # Max 70 points per critical
+                critical_detections += 1
+            elif severity == 'high':
+                risk_score += confidence * 0.4  # Max 40 points per high
+                high_detections += 1
+            elif severity == 'medium':
+                risk_score += confidence * 0.2  # Max 20 points per medium
+            else:  # low
+                risk_score += confidence * 0.1  # Max 10 points per low
         
-        # Score from suspicious imports
-        if result.static_analysis.get('suspicious_imports'):
-            risk_score += len(result.static_analysis['suspicious_imports']) * 5
+        # Small bonus for dangerous APIs (only if many)
+        if 'dangerous_imports' in result.static_analysis:
+            dangerous_count = len(result.static_analysis['dangerous_imports'])
+            if dangerous_count > 15:  # Only flag if many dangerous APIs
+                risk_score += min(10, dangerous_count * 0.5)  # Cap at 10 points
         
-        # Score from suspicious strings
-        if result.static_analysis.get('strings', {}).get('suspicious'):
-            risk_score += len(result.static_analysis['strings']['suspicious']) * 2
+        # Small bonus for suspicious indicators
+        if 'suspicious_indicators' in result.static_analysis:
+            risk_score += min(5, len(result.static_analysis['suspicious_indicators']))  # Cap at 5 points
         
-        # Determine verdict
-        if risk_score >= 80:
+        # Reduce score significantly if no critical detections
+        if critical_detections == 0:
+            risk_score = risk_score * 0.4  # Reduce by 60% if no critical threats
+        
+        # Determine verdict (stricter thresholds)
+        if risk_score >= 70 and critical_detections >= 1:
             verdict = "Malicious"
-        elif risk_score >= 50:
+        elif risk_score >= 50 and (critical_detections >= 1 or high_detections >= 2):
             verdict = "Suspicious"
-        elif risk_score >= 20:
+        elif risk_score >= 30:
             verdict = "Potentially Unwanted"
         else:
             verdict = "Clean"
         
-        return verdict, min(risk_score, 100)
+        return verdict, min(int(risk_score), 100)
     
     def cleanup(self) -> None:
         """Cleanup analyzer resources"""

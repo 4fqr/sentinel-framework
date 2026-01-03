@@ -29,6 +29,11 @@ class RansomwareDetector:
             'ransom', 'decrypt', 'bitcoin', 'payment', 'your files',
             'encrypted', 'restore', 'unlock', 'recover your'
         ]
+        
+        # Stricter thresholds to avoid false positives
+        self.encryption_threshold = 200  # Minimum files (increased from implicit 10)
+        self.modification_rate_threshold = 50  # Files per second (increased from 10)
+        self.rename_threshold = 50  # Minimum suspicious renames
     
     def detect(self, events: List[BehaviorEvent], analysis_result: Any) -> List[Dict[str, Any]]:
         """
@@ -72,7 +77,8 @@ class RansomwareDetector:
             if e.event_type == EventType.FILE_MODIFIED
         ]
         
-        if len(file_modified_events) < 10:
+        # Need significant file modifications to suspect ransomware
+        if len(file_modified_events) < self.encryption_threshold:
             return None
         
         # Check for suspicious extensions
@@ -97,21 +103,25 @@ class RansomwareDetector:
         else:
             modification_rate = 0
         
-        # High modification rate + suspicious renames = likely ransomware
-        if modification_rate > 5 or suspicious_renames >= 3:
-            confidence = min(90, int(modification_rate * 10 + suspicious_renames * 15))
+        # STRICT: High modification rate + suspicious renames = ransomware
+        # Require BOTH high rate AND suspicious extensions
+        if modification_rate > self.modification_rate_threshold and suspicious_renames >= self.rename_threshold:
+            confidence = min(95, int(modification_rate * 2 + suspicious_renames * 0.5))
             
             return {
                 'threat_type': 'Ransomware',
                 'technique': 'File Encryption',
-                'description': f'Detected rapid file modifications ({len(file_modified_events)} files) and suspicious renames',
+                'description': f'Detected rapid file encryption ({len(file_modified_events)} files) with suspicious extensions',
                 'confidence': confidence,
                 'severity': 'critical',
                 'indicators': {
                     'files_modified': len(file_modified_events),
                     'suspicious_renames': suspicious_renames,
-                    'modification_rate': f'{modification_rate:.2f} files/sec'
-                }
+                    'modification_rate': f'{modification_rate:.2f} files/sec',
+                    'suspicious_extensions': True
+                },
+                'impact': 'Files are being encrypted - data loss imminent',
+                'mitigation': 'IMMEDIATELY disconnect from network, stop the process, restore from backup'
             }
         
         return None
