@@ -133,8 +133,7 @@ class MalwareAnalyzer:
                 file_type="error",
                 file_size=0,
                 analysis_time=0,
-                verdict="Error",
-                error=str(e)
+                verdict=f"Error: {str(e)}"
             )
         
         # Initialize result
