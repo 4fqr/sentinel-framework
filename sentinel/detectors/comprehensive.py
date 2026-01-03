@@ -57,6 +57,10 @@ class ComprehensiveMalwareDetector:
             }
         }
     
+    def detect(self, events: List, static_analysis: Dict) -> List[Dict[str, Any]]:
+        """Standard detect interface that calls detect_all"""
+        return self.detect_all(events, static_analysis)
+    
     def detect_all(self, events: List, static_analysis: Dict) -> List[Dict[str, Any]]:
         """Detect all malware families"""
         detections = []

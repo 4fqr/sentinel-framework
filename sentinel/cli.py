@@ -389,18 +389,21 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
             # Register callback for live updates
             analyzer.monitor.register_callback(live_monitor.update_event)
             
+            # Set very long timeout for live mode (user will stop manually)
+            live_timeout = 7200  # 2 hours max, but user stops with Ctrl+C
+            
             console.print(f"\n[bold cyan]🔴 LIVE MONITORING MODE[/bold cyan]")
             console.print(f"[dim]Application will run in background while we monitor behavior[/dim]")
             console.print(f"[bold yellow]Press Ctrl+C when done to stop and analyze results[/bold yellow]\n")
             
             try:
                 with Live(live_monitor.generate_display(), refresh_per_second=2, console=console) as live_display:
-                    # Run analysis
+                    # Run analysis with extended timeout
                     result = analyzer.analyze(
                         str(sample_path),
                         enable_static=not no_static,
                         enable_dynamic=not no_dynamic,
-                        timeout=timeout
+                        timeout=live_timeout  # Use extended timeout for live mode
                     )
                     
                     # Update display one last time

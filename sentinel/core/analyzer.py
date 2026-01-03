@@ -626,8 +626,15 @@ class MalwareAnalyzer:
         
         for detector in self.detectors:
             try:
-                detections = detector.detect(events, result)
-                all_detections.extend(detections)
+                # Pass static_analysis dict, not the full result object
+                detections = detector.detect(events, result.static_analysis)
+                
+                # Handle both single detection and list of detections
+                if detections:
+                    if isinstance(detections, list):
+                        all_detections.extend(detections)
+                    else:
+                        all_detections.append(detections)
             except Exception as e:
                 logger.error(f"Detector {detector.__class__.__name__} failed: {e}")
         

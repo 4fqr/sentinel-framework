@@ -279,33 +279,50 @@ class SandboxEngine:
             self.state = SandboxState.RUNNING
             
             # Launch process in background (non-blocking for live monitoring)
+            # Use CREATE_NEW_CONSOLE for GUI apps on Windows to detach properly
+            import platform
+            creation_flags = 0
+            if platform.system() == 'Windows':
+                creation_flags = subprocess.CREATE_NEW_CONSOLE | subprocess.CREATE_NEW_PROCESS_GROUP
+            
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env,
                 cwd=os.path.dirname(sample_path),
+                creationflags=creation_flags if platform.system() == 'Windows' else 0,
             )
             
             # Store process for potential termination
             self.running_process = process
+            self.sample_path = sample_path  # Store for process tracking
             
-            # Wait for timeout or until process exits
-            try:
-                stdout, stderr = process.communicate(timeout=timeout)
-                exit_code = process.returncode
-            except subprocess.TimeoutExpired:
-                # Process still running after timeout - this is expected for live monitoring
-                logger.debug(f"Process still running after {timeout}s - live monitoring mode")
+            # For live monitoring mode (timeout > 120s), keep process running
+            # and wait for manual termination rather than timeout
+            if timeout > 120:  # Live monitoring mode
+                logger.info("Live monitoring mode: Process launched, waiting for manual stop (Ctrl+C)")
+                # Don't wait for process to complete - let it run until user stops
+                # The CLI will handle Ctrl+C and call terminate_running_process()
                 stdout, stderr = b'', b''
                 exit_code = None
+            else:
+                # Normal timeout-based execution for non-live mode
+                try:
+                    stdout, stderr = process.communicate(timeout=timeout)
+                    exit_code = process.returncode
+                except subprocess.TimeoutExpired:
+                    # Process still running after timeout
+                    logger.debug(f"Process still running after {timeout}s")
+                    stdout, stderr = b'', b''
+                    exit_code = None
             
             return SandboxResult(
                 success=True,
                 execution_time=0,  # Will be set by caller
                 exit_code=exit_code,
-                stdout=stdout.decode('utf-8', errors='ignore'),
-                stderr=stderr.decode('utf-8', errors='ignore'),
+                stdout=stdout.decode('utf-8', errors='ignore') if stdout else '',
+                stderr=stderr.decode('utf-8', errors='ignore') if stderr else '',
             )
             
         except subprocess.TimeoutExpired:
@@ -321,7 +338,7 @@ class SandboxEngine:
             return SandboxResult(success=False, execution_time=0, error=str(e))
     
     def terminate_running_process(self) -> None:
-        """Terminate any running process (for live monitoring)"""
+        """Terminate any running process and its children (for live monitoring)"""
         if self.running_process and self.running_process.poll() is None:
             logger.info("Terminating running process for analysis")
             try:
@@ -336,6 +353,27 @@ class SandboxEngine:
                 logger.error(f"Failed to terminate process: {e}")
             finally:
                 self.running_process = None
+        
+        # Also try to terminate child processes spawned by the application
+        # This handles cases where launcher EXE spawns the actual game
+        if hasattr(self, 'sample_path') and self.sample_path:
+            try:
+                import psutil
+                sample_name = os.path.basename(self.sample_path).lower()
+                
+                # Find all processes with matching name
+                for proc in psutil.process_iter(['name', 'exe']):
+                    try:
+                        if proc.info['name'] and sample_name in proc.info['name'].lower():
+                            logger.info(f"Terminating child process: {proc.info['name']} (PID: {proc.pid})")
+                            proc.terminate()
+                            proc.wait(timeout=3)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        pass
+            except ImportError:
+                logger.debug("psutil not available - cannot track child processes")
+            except Exception as e:
+                logger.error(f"Error terminating child processes: {e}")
     
     def create_snapshot(self, name: str) -> bool:
         """
