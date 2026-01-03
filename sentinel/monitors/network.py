@@ -9,7 +9,7 @@ import socket
 from typing import Callable, Dict, List, Optional, Set
 import psutil
 
-from sentinel.core.monitor import BehaviorEvent, EventType, EventSeverity
+from sentinel.core.events import BehaviorEvent, EventType, EventSeverity
 from sentinel.config import config
 from sentinel.utils.logger import get_logger
 

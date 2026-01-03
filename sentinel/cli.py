@@ -17,7 +17,8 @@ from rich import box
 from rich.text import Text
 
 from sentinel.core.sandbox import SandboxEngine
-from sentinel.core.monitor import BehaviorMonitor, BehaviorEvent, EventSeverity
+from sentinel.core.monitor import BehaviorMonitor
+from sentinel.core.events import BehaviorEvent, EventSeverity
 from sentinel.core.analyzer import MalwareAnalyzer
 from sentinel.core.reporter import ReportGenerator
 from sentinel.utils.logger import SentinelLogger, get_logger

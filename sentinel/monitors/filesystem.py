@@ -10,7 +10,7 @@ from typing import Callable, List, Optional, Set
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
-from sentinel.core.monitor import BehaviorEvent, EventType, EventSeverity
+from sentinel.core.events import BehaviorEvent, EventType, EventSeverity
 from sentinel.config import config
 from sentinel.utils.logger import get_logger
 

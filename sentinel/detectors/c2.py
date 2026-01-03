@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 import re
 
-from sentinel.core.monitor import BehaviorEvent, EventType
+from sentinel.core.events import BehaviorEvent, EventType
 from sentinel.utils.logger import get_logger
 
 

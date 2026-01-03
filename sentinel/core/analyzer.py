@@ -9,7 +9,8 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
 from sentinel.core.sandbox import SandboxEngine, SandboxResult
-from sentinel.core.monitor import BehaviorMonitor, BehaviorEvent
+from sentinel.core.monitor import BehaviorMonitor
+from sentinel.core.events import BehaviorEvent
 from sentinel.detectors.ransomware import RansomwareDetector
 from sentinel.detectors.c2 import C2Detector
 from sentinel.detectors.injection import InjectionDetector

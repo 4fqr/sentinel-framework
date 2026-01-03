@@ -4,10 +4,10 @@ Identifies ransomware behavior patterns
 """
 
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
-from sentinel.core.monitor import BehaviorEvent, EventType, EventSeverity
+from sentinel.core.events import BehaviorEvent, EventType, EventSeverity
 from sentinel.utils.logger import get_logger
 
 
