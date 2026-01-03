@@ -20,6 +20,9 @@ from sentinel.detectors.trojan import TrojanDetector
 from sentinel.detectors.comprehensive import ComprehensiveMalwareDetector
 from sentinel.analyzers.archive_analyzer import ArchiveAnalyzer
 from sentinel.analyzers.document_analyzer import DocumentAnalyzer
+from sentinel.analyzers.deep_pe_analyzer import DeepPEAnalyzer
+from sentinel.analyzers.file_type_detector import UniversalFileDetector
+from sentinel.analyzers.string_extractor import AdvancedStringExtractor
 from sentinel.utils.logger import get_logger
 from sentinel.utils.helpers import get_file_hashes, get_file_type, format_bytes
 from sentinel.config import config
@@ -225,6 +228,24 @@ class MalwareAnalyzer:
             'suspicious_indicators': []
         }
         
+        # Universal file type detection
+        try:
+            file_detector = UniversalFileDetector()
+            file_info = file_detector.detect(sample_path)
+            static_info['file_detection'] = file_info
+            logger.info(f"File type: {file_info.get('file_type')}, Category: {file_info.get('category')}")
+        except Exception as e:
+            logger.error(f"File type detection failed: {e}")
+        
+        # Advanced string extraction
+        try:
+            string_extractor = AdvancedStringExtractor()
+            strings_analysis = string_extractor.extract(sample_path)
+            static_info['strings_analysis'] = strings_analysis
+            logger.info(f"Extracted {strings_analysis.get('total_strings', 0)} strings")
+        except Exception as e:
+            logger.error(f"String extraction failed: {e}")
+        
         # Get file extension
         ext = Path(sample_path).suffix.lower()
         
@@ -255,6 +276,24 @@ class MalwareAnalyzer:
         # PE analysis for Windows executables
         if sample_path.lower().endswith(('.exe', '.dll', '.sys')):
             try:
+                # Deep PE analysis
+                deep_pe_analyzer = DeepPEAnalyzer()
+                deep_pe_results = deep_pe_analyzer.analyze(sample_path)
+                static_info['deep_pe_analysis'] = deep_pe_results
+                logger.info("Deep PE analysis completed")
+                
+                # Add packer/entropy warnings to suspicious indicators
+                if deep_pe_results.get('packer_detection', {}).get('is_packed'):
+                    packers = deep_pe_results['packer_detection'].get('detected_packers', [])
+                    if packers:
+                        static_info['suspicious_indicators'].append({
+                            'type': 'Packer Detected',
+                            'severity': 'HIGH',
+                            'description': f'File appears to be packed with: {", ".join(packers)}',
+                            'evidence': 'Packer signatures found in sections'
+                        })
+                
+                # Legacy PE info for compatibility
                 import pefile
                 import math
                 pe = pefile.PE(sample_path)
