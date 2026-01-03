@@ -3,7 +3,7 @@ Trojan Detector - Detects Trojan horses and backdoors
 """
 
 from typing import Dict, Any, List, Optional
-from sentinel.core.events import BehaviorEvent
+from sentinel.core.events import BehaviorEvent, EventType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class TrojanDetector:
         indicators = []
         
         # Check for suspicious network connections
-        network_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == 'network_connection']
+        network_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == EventType.NETWORK_CONNECTION]
         
         for event in network_events:
             if hasattr(event, 'remote_port') and event.remote_port in self.trojan_indicators['rat_ports']:
@@ -155,8 +155,8 @@ class TrojanDetector:
                     indicators.append(f'Download API: {api["function"]}')
         
         # Check for file creation after network activity
-        file_created = [e for e in events if hasattr(e, 'event_type') and e.event_type == 'file_created']
-        network_activity = [e for e in events if hasattr(e, 'event_type') and e.event_type == 'network_connection']
+        file_created = [e for e in events if hasattr(e, 'event_type') and e.event_type == EventType.FILE_CREATED]
+        network_activity = [e for e in events if hasattr(e, 'event_type') and e.event_type == EventType.NETWORK_CONNECTION]
         
         if file_created and network_activity:
             indicators.append(f'{len(file_created)} files created after network activity')

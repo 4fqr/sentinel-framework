@@ -4,6 +4,7 @@ Detects: Trojans, Worms, Rootkits, Botnets, Miners, Spyware, Adware, APT techniq
 """
 
 from typing import List, Dict, Any
+from sentinel.core.events import EventType
 import logging
 
 logger = logging.getLogger(__name__)
@@ -186,12 +187,12 @@ class ComprehensiveMalwareDetector:
         indicators = []
         
         # Check for file replication
-        file_created = [e for e in events if hasattr(e, 'event_type') and 'file_created' in e.event_type]
+        file_created = [e for e in events if hasattr(e, 'event_type') and e.event_type == EventType.FILE_CREATED]
         if len(file_created) > 20:
             indicators.append(f'{len(file_created)} files created - possible self-replication')
         
         # Check for network scanning
-        network_events = [e for e in events if hasattr(e, 'event_type') and 'network' in e.event_type]
+        network_events = [e for e in events if hasattr(e, 'event_type') and e.event_type == EventType.NETWORK_CONNECTION]
         unique_ips = set()
         for event in network_events:
             if hasattr(event, 'remote_ip'):
@@ -250,7 +251,7 @@ class ComprehensiveMalwareDetector:
         indicators = []
         
         # Check for PowerShell usage
-        process_events = [e for e in events if hasattr(e, 'event_type') and 'process' in e.event_type]
+        process_events = [e for e in events if hasattr(e, 'event_type') and e.event_type in [EventType.PROCESS_CREATED, EventType.PROCESS_TERMINATED]]
         for event in process_events:
             if hasattr(event, 'process_name') and 'powershell' in event.process_name.lower():
                 indicators.append('PowerShell execution detected')

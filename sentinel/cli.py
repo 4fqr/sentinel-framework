@@ -398,46 +398,50 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
             console.print(f"[bold yellow]Press Ctrl+C when done to stop and analyze results[/bold yellow]\n")
             
             try:
-                # Start analysis in background (non-blocking)
+                # Start static analysis first
+                console.print(f"[dim]Running static analysis...[/dim]")
+                analyzer_instance = analyzer
+                
+                # Do static analysis synchronously
                 import threading
-                analysis_complete = threading.Event()
-                analysis_result = [None]
                 
-                def run_analysis():
-                    analysis_result[0] = analyzer.analyze(
-                        str(sample_path),
-                        enable_static=not no_static,
-                        enable_dynamic=not no_dynamic,
-                        timeout=live_timeout
-                    )
-                    analysis_complete.set()
+                # Run dynamic analysis in thread
+                def start_dynamic():
+                    time.sleep(1)  # Brief delay
+                    analyzer_instance.monitor.start()
+                    analyzer_instance.sandbox.execute(str(sample_path), timeout=live_timeout)
                 
-                # Start analysis thread
-                analysis_thread = threading.Thread(target=run_analysis, daemon=True)
-                analysis_thread.start()
+                dynamic_thread = threading.Thread(target=start_dynamic, daemon=True)
+                dynamic_thread.start()
                 
-                # Wait for sandbox to start (brief delay)
-                time.sleep(2)
+                # Wait for monitoring to start
+                time.sleep(3)
                 
-                # Live display loop - keep updating until Ctrl+C
+                console.print(f"[green]✓[/green] Monitoring active - application running in background")
+                console.print(f"[bold yellow]→ Press Ctrl+C anytime to stop and see results[/bold yellow]\n")
+                
+                # Live display loop - runs FOREVER until Ctrl+C (ignore analysis completion)
                 with Live(live_monitor.generate_display(), refresh_per_second=2, console=console) as live_display:
-                    while not analysis_complete.is_set():
+                    while True:  # Loop forever until Ctrl+C
                         live_display.update(live_monitor.generate_display())
                         time.sleep(0.5)
                 
-                result = analysis_result[0]
-                
             except KeyboardInterrupt:
                 console.print(f"\n\n[bold yellow]⏹️  Stopping live monitoring...[/bold yellow]")
-                analyzer.sandbox.terminate_running_process()
-                analyzer.monitor.stop()
-                console.print(f"[green]✓[/green] Analysis stopped by user\n")
                 
-                # Get results after stopping
+                # Stop everything
+                analyzer.sandbox.terminate_running_process()
+                time.sleep(1)
+                analyzer.monitor.stop()
+                
+                console.print(f"[green]✓[/green] Monitoring stopped\n")
+                console.print(f"[dim]Generating analysis report...[/dim]\n")
+                
+                # Now do full analysis with collected data
                 result = analyzer.analyze(
                     str(sample_path),
-                    enable_static=not no_static,
-                    enable_dynamic=False,  # Already done
+                    enable_static=True,
+                    enable_dynamic=False,  # Already collected events
                     timeout=1
                 )
                 
