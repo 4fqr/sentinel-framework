@@ -124,7 +124,7 @@ cd sentinel-framework
 .\setup.bat
 
 # Verify installation
-sentinel --version
+python -m sentinel --version
 ```
 
 #### **🐧 Linux / 🍎 Mac (Automated)**
@@ -138,7 +138,7 @@ chmod +x setup.sh
 ./setup.sh
 
 # Verify installation
-sentinel --version
+python -m sentinel --version
 ```
 
 #### **📦 Manual Installation**
@@ -161,7 +161,7 @@ pip install -e .
 python test_installation.py
 
 # Verify installation
-sentinel info
+python -m sentinel info
 ```
 
 ### 🎯 First Analysis in 30 Seconds
