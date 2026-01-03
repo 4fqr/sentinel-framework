@@ -26,26 +26,21 @@ from sentinel.config import config
 from sentinel import __version__
 
 
-console = Console()
+# Initialize Rich console with safe encoding for Windows
+console = Console(legacy_windows=True, force_terminal=False)
 logger = get_logger(__name__)
 
 
 def print_banner():
     """Print Sentinel Framework banner"""
     banner = """
-╔═══════════════════════════════════════════════════════════════╗
-║                                                               ║
-║   ███████╗███████╗███╗   ██╗████████╗██╗███╗   ██╗███████╗██╗ ║
-║   ██╔════╝██╔════╝████╗  ██║╚══██╔══╝██║████╗  ██║██╔════╝██║ ║
-║   ███████╗█████╗  ██╔██╗ ██║   ██║   ██║██╔██╗ ██║█████╗  ██║ ║
-║   ╚════██║██╔══╝  ██║╚██╗██║   ██║   ██║██║╚██╗██║██╔══╝  ██║ ║
-║   ███████║███████╗██║ ╚████║   ██║   ██║██║ ╚████║███████╗███████╗ ║
-║   ╚══════╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝╚═╝  ╚═══╝╚══════╝╚══════╝ ║
-║                                                               ║
-║         Malware Analysis Sandbox - Version {}               ║
-║         Open-Source | Behavioral Monitoring | Automated      ║
-║                                                               ║
-╚═══════════════════════════════════════════════════════════════╝
++=================================================================+
+|                                                                 |
+|   SENTINEL FRAMEWORK                                            |
+|   Malware Analysis Sandbox - Version {}                        |
+|   Open-Source | Behavioral Monitoring | Automated              |
+|                                                                 |
++=================================================================+
     """.format(__version__)
     
     console.print(banner, style="bold cyan")
@@ -87,7 +82,7 @@ class LiveMonitor:
         )
         
         # Header
-        header_text = Text("🛡️  SENTINEL FRAMEWORK - LIVE ANALYSIS", style="bold white on blue", justify="center")
+        header_text = Text("[SENTINEL FRAMEWORK - LIVE ANALYSIS]", style="bold white on blue", justify="center")
         layout["header"].update(Panel(header_text))
         
         # Body - split into stats and events
@@ -143,7 +138,7 @@ class LiveMonitor:
 @click.version_option(version=__version__)
 def cli():
     """
-    🛡️ Sentinel Framework - Malware Analysis Sandbox
+    SENTINEL FRAMEWORK - Malware Analysis Sandbox
     
     Advanced open-source platform for automated malware analysis
     with behavioral monitoring and threat detection.
@@ -169,7 +164,7 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live):
     
     sample_path = Path(sample)
     
-    console.print(f"\n[bold cyan]═══ Analysis Target ═══[/bold cyan]")
+    console.print(f"\n[bold cyan]=== Analysis Target ===[/bold cyan]")
     console.print(f"Sample: [yellow]{sample_path}[/yellow]")
     console.print(f"Size: [yellow]{sample_path.stat().st_size:,}[/yellow] bytes\n")
     
@@ -221,13 +216,13 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live):
         if format or output:
             reporter = ReportGenerator()
             report_path = reporter.generate(result, format=format, output_file=output)
-            console.print(f"\n[bold green]✓[/bold green] Report generated: [cyan]{report_path}[/cyan]")
+            console.print(f"\n[bold green]SUCCESS[/bold green] Report generated: [cyan]{report_path}[/cyan]")
         
         # Cleanup
         analyzer.cleanup()
         
     except KeyboardInterrupt:
-        console.print("\n[bold yellow]⚠[/bold yellow] Analysis interrupted by user")
+        console.print("\n[bold yellow][WARNING][/bold yellow] Analysis interrupted by user")
         sys.exit(1)
     except Exception as e:
         console.print(f"\n[bold red]✗ Analysis failed:[/bold red] {e}")
@@ -237,7 +232,7 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live):
 
 def display_results(result):
     """Display analysis results in a beautiful format"""
-    console.print(f"\n[bold cyan]═══ Analysis Complete ═══[/bold cyan]\n")
+    console.print(f"\n[bold cyan]=== Analysis Complete ===[/bold cyan]\n")
     
     # Verdict panel
     verdict_color = {
@@ -260,7 +255,7 @@ def display_results(result):
     
     # Threat detections
     if result.threat_detections:
-        console.print(f"\n[bold red]⚠ Threat Detections ({len(result.threat_detections)}):[/bold red]")
+        console.print(f"\n[bold red][!] Threat Detections ({len(result.threat_detections)}):[/bold red]")
         
         detections_table = Table(show_header=True, box=box.ROUNDED)
         detections_table.add_column("Type", style="cyan")
@@ -306,7 +301,7 @@ def view(report_file):
         console.print(f"\n[bold cyan]Report:[/bold cyan] {report_path}")
         console.print_json(json.dumps(data, indent=2))
     else:
-        console.print(f"\n[bold yellow]⚠[/bold yellow] Viewing {report_path.suffix} reports not yet supported")
+        console.print(f"\n[bold yellow][WARNING][/bold yellow] Viewing {report_path.suffix} reports not yet supported")
 
 
 @cli.command()
@@ -329,13 +324,13 @@ def info():
     console.print(f"\n[bold cyan]Enabled Monitors:[/bold cyan]")
     monitors = []
     if config.get('monitoring.file_system.enabled', True):
-        monitors.append("✓ File System")
+        monitors.append("[OK] File System")
     if config.get('monitoring.process.enabled', True):
-        monitors.append("✓ Process")
+        monitors.append("[OK] Process")
     if config.get('monitoring.registry.enabled', True):
-        monitors.append("✓ Registry")
+        monitors.append("[OK] Registry")
     if config.get('monitoring.network.enabled', True):
-        monitors.append("✓ Network")
+        monitors.append("[OK] Network")
     
     for monitor in monitors:
         console.print(f"  {monitor}")
