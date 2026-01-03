@@ -67,9 +67,9 @@ if errorlevel 1 (
     echo Sentinel Framework is ready to use.
     echo.
     echo Quick Start:
-    echo   sentinel --help
-    echo   sentinel info
-    echo   sentinel analyze sample.exe --live
+    echo   python -m sentinel --help
+    echo   python -m sentinel info
+    echo   python -m sentinel analyze sample.exe --live
     echo.
     echo Documentation:
     echo   README.md - Full documentation
