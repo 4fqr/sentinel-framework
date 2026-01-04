@@ -30,15 +30,32 @@ def calculate_hash(file_path: str, algorithm: str = 'sha256') -> str:
     Returns:
         Hex digest of file hash
     """
+    # Check if it's actually a file, not a directory
+    path = Path(file_path)
+    if not path.exists():
+        raise IOError(f"File does not exist: {file_path}")
+    if path.is_dir():
+        raise IOError(f"Cannot hash directory: {file_path}")
+    if not path.is_file():
+        raise IOError(f"Not a regular file: {file_path}")
+    
     hash_func = getattr(hashlib, algorithm)()
     
-    try:
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
-                hash_func.update(chunk)
-        return hash_func.hexdigest()
-    except Exception as e:
-        raise IOError(f"Failed to calculate hash: {e}")
+    # Try with retry logic for locked files
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with open(file_path, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    hash_func.update(chunk)
+            return hash_func.hexdigest()
+        except PermissionError as e:
+            if attempt < max_retries - 1:
+                time.sleep(0.5)  # Wait before retry
+                continue
+            raise IOError(f"Permission denied (file may be locked by another process): {e}")
+        except Exception as e:
+            raise IOError(f"Failed to calculate hash: {e}")
 
 
 def get_file_hashes(file_path: str) -> Dict[str, str]:

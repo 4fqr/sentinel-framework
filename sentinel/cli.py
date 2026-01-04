@@ -131,6 +131,7 @@ class LiveMonitor:
 def _collect_samples(directory: Path, recursive: bool, extensions: tuple) -> List[Path]:
     """Collect sample files from directory"""
     samples = []
+    skipped = []
     
     # Default extensions if none specified
     if not extensions:
@@ -140,8 +141,30 @@ def _collect_samples(directory: Path, recursive: bool, extensions: tuple) -> Lis
     pattern = '**/*' if recursive else '*'
     
     for file_path in directory.glob(pattern):
-        if file_path.is_file() and file_path.suffix.lower() in extensions:
+        # Skip if not a file
+        if not file_path.is_file():
+            continue
+            
+        # Skip if wrong extension
+        if file_path.suffix.lower() not in extensions:
+            continue
+        
+        # Try to open file to check if it's accessible
+        try:
+            with open(file_path, 'rb') as f:
+                f.read(1)  # Try reading one byte
             samples.append(file_path)
+        except PermissionError:
+            skipped.append((file_path.name, "File locked by another process"))
+        except Exception as e:
+            skipped.append((file_path.name, str(e)))
+    
+    if skipped:
+        console.print(f"\n[yellow]⚠ Skipped {len(skipped)} locked/inaccessible files:[/yellow]")
+        for name, reason in skipped[:5]:  # Show first 5
+            console.print(f"  [dim]• {name}: {reason}[/dim]")
+        if len(skipped) > 5:
+            console.print(f"  [dim]... and {len(skipped) - 5} more[/dim]")
     
     return sorted(samples)
 
@@ -149,6 +172,21 @@ def _collect_samples(directory: Path, recursive: bool, extensions: tuple) -> Lis
 def _analyze_single_sample(sample_path: Path, timeout, no_static, no_dynamic, format, output_dir):
     """Analyze a single sample (for parallel execution)"""
     try:
+        # Validate file before analysis
+        if not sample_path.exists():
+            raise IOError(f"File not found: {sample_path}")
+        if sample_path.is_dir():
+            raise IOError(f"Cannot analyze directory: {sample_path}")
+        if not sample_path.is_file():
+            raise IOError(f"Not a regular file: {sample_path}")
+        
+        # Check if file is accessible
+        try:
+            with open(sample_path, 'rb') as f:
+                f.read(1)
+        except PermissionError:
+            raise IOError(f"File locked by another process (close the application using it)")
+        
         analyzer = MalwareAnalyzer()
         
         result = analyzer.analyze(
@@ -178,10 +216,19 @@ def _analyze_single_sample(sample_path: Path, timeout, no_static, no_dynamic, fo
             'report': report_path
         }
     except Exception as e:
+        # Extract more specific error message
+        error_msg = str(e)
+        if "Permission denied" in error_msg or "locked" in error_msg:
+            error_msg = "File locked (close any programs using this file)"
+        elif "hash" in error_msg.lower():
+            # Extract just the relevant part
+            if ":" in error_msg:
+                error_msg = error_msg.split(":", 1)[1].strip()
+        
         return {
             'sample': sample_path.name,
             'success': False,
-            'error': str(e)
+            'error': error_msg
         }
 
 
@@ -248,6 +295,7 @@ def _analyze_directory(directory: Path, timeout, no_static, no_dynamic, format, 
     summary_table.add_column("Status", style="green")
     summary_table.add_column("Threat Level", style="yellow")
     summary_table.add_column("Threats", justify="right")
+    summary_table.add_column("Error", style="red")
     
     successful = 0
     failed = 0
@@ -256,22 +304,28 @@ def _analyze_directory(directory: Path, timeout, no_static, no_dynamic, format, 
     for result in results:
         if result['success']:
             successful += 1
-            status = "[OK]"
+            status = "[green]✓ OK[/green]"
             threat_level = result['threat_level']
             threats = str(result['threats'])
+            error_msg = ""
             if result['threats'] > 0:
                 critical_threats += 1
         else:
             failed += 1
-            status = "[FAIL]"
-            threat_level = "Error"
-            threats = "-"
+            status = "[red]✗ FAIL[/red]"
+            threat_level = "[dim]-[/dim]"
+            threats = "[dim]-[/dim]"
+            # Shorten error message for table
+            error_msg = result.get('error', 'Unknown error')[:50]
+            if len(result.get('error', '')) > 50:
+                error_msg += "..."
         
         summary_table.add_row(
             result['sample'],
             status,
             threat_level,
-            threats
+            threats,
+            error_msg
         )
     
     console.print(summary_table)
@@ -282,6 +336,19 @@ def _analyze_directory(directory: Path, timeout, no_static, no_dynamic, format, 
     console.print(f"  Successful: [green]{successful}[/green]")
     console.print(f"  Failed: [red]{failed}[/red]")
     console.print(f"  Threats Detected: [red]{critical_threats}[/red]")
+    
+    # Show helpful tips if all failed
+    if failed > 0 and successful == 0:
+        console.print(f"\n[bold yellow]⚠ All samples failed. Common issues:[/bold yellow]")
+        console.print(f"  [cyan]•[/cyan] Files locked by running applications (close them first)")
+        console.print(f"  [cyan]•[/cyan] Insufficient permissions (run as administrator)")
+        console.print(f"  [cyan]•[/cyan] System files that cannot be analyzed")
+        console.print(f"  [cyan]•[/cyan] Files in use by Windows")
+        console.print(f"\n[bold]Try:[/bold]")
+        console.print(f"  1. Close any running applications using these files")
+        console.print(f"  2. Copy files to a different directory")
+        console.print(f"  3. Run PowerShell as Administrator")
+    
     console.print(f"\n[bold]Reports saved to:[/bold] [cyan]{output_dir}[/cyan]\n")
 
 
@@ -365,11 +432,12 @@ def analyze(sample, timeout, no_static, no_dynamic, format, output, live, recurs
             sample_path, timeout, no_static, no_dynamic, 
             format, output, live, recursive, parallel, extensions
         )
-    else:
-        # Single file analysis
-        console.print(f"\n[bold cyan]=== Analysis Target ===[/bold cyan]")
-        console.print(f"Sample: [yellow]{sample_path}[/yellow]")
-        console.print(f"Size: [yellow]{sample_path.stat().st_size:,}[/yellow] bytes\n")
+        return  # Exit after directory analysis - don't continue to single file analysis
+    
+    # Single file analysis
+    console.print(f"\n[bold cyan]=== Analysis Target ===[/bold cyan]")
+    console.print(f"Sample: [yellow]{sample_path}[/yellow]")
+    console.print(f"Size: [yellow]{sample_path.stat().st_size:,}[/yellow] bytes\n")
     
     try:
         analyzer = MalwareAnalyzer()
